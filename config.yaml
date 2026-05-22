@@ -1,0 +1,19 @@
+vmanage:
+  # Cisco SD-WAN Sandbox defaults — replace with your own deployment.
+  # https://devnetsandbox.cisco.com/RM/Diagram/Index/c9679e44-d4c8-4dc5-b1b4-92e36f3da46b
+  host: sandbox-sdwan-2.cisco.com
+  port: 443
+  verify_ssl: false
+  username: "${VMANAGE_USERNAME}"
+  password: "${VMANAGE_PASSWORD}"
+  use_jwt: false           # 20.10 doesn't support the modern JWT endpoint -> use session
+
+sdwan:
+  specs_dir: ./specs
+  active_version: "20.10"
+  tag_granularity: section  # "section" (~30-40 tools) | "tag" (300+ tools)
+
+transport:
+  mode: stdio             # stdio | sse | streamable-http
+  host: 127.0.0.1
+  port: 8000

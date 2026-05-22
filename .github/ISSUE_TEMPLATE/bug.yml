@@ -1,0 +1,30 @@
+name: Bug report
+description: Something broken or behaving unexpectedly
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the bug and what you expected to happen.
+    validations:
+      required: true
+  - type: input
+    id: spec-version
+    attributes:
+      label: vManage / spec version
+      placeholder: "20.10"
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: "Claude Desktop, Claude Code, Cursor, …"
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell

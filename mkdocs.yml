@@ -1,0 +1,71 @@
+site_name: catalyst-sdwan-super-mcp
+site_description: FastMCP server for Cisco Catalyst SD-WAN Manager (vManage), driven by the official OpenAPI specs.
+site_url: https://thomaschristory.github.io/catalyst-sdwan-super-mcp/
+repo_url: https://github.com/thomaschristory/catalyst-sdwan-super-mcp
+repo_name: thomaschristory/catalyst-sdwan-super-mcp
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Install: getting-started/install.md
+      - First run: getting-started/first-run.md
+      - DevNet sandbox: getting-started/sandbox.md
+  - Guides:
+      - MCP clients: guides/mcp-clients.md
+      - Read-only vs read-write: guides/read-write.md
+      - Tool granularity: guides/granularity.md
+      - Spec versions and diff: guides/spec-versions.md
+      - Docker: guides/docker.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Configuration: reference/configuration.md
+      - Authentication: reference/authentication.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Data flow: architecture/data-flow.md
+  - Contributing:
+      - Development: contributing/development.md
+      - Release process: contributing/release-process.md
