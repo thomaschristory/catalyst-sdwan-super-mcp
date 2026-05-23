@@ -1,5 +1,7 @@
 # Install
 
+**Supports vManage 20.15+.** Older releases are out of scope.
+
 ## From source (recommended for now — we're pre-PyPI)
 
 ```bash
@@ -33,7 +35,7 @@ vmanage:
   host: vmanage.example.com   # your vManage hostname
   port: 8443                  # or 443 in front of a load balancer
   verify_ssl: true            # set to false for self-signed
-  use_jwt: true               # set to false for vManage < 20.18.1
+  use_jwt: true               # set to false to force JSESSIONID + XSRF fallback
 
 sdwan:
   specs_dir: ./specs
@@ -43,14 +45,14 @@ sdwan:
 
 ## Get the OpenAPI specs
 
-Cisco publishes vManage OpenAPI specs on DevNet. The 20.10 spec is shipped with this repo (`specs/20.10/`) because it matches the public sandbox. For other versions:
+Cisco publishes vManage OpenAPI specs on DevNet. Three versions are bundled with this repo:
 
 ```bash
-# 20.10 is already bundled
-ls specs/20.10/
-
-# For other versions, see docs/guides/spec-versions.md
+ls specs/
+# 20.15  20.16  20.18  README.md
 ```
+
+`20.18` is the default and matches the public DevNet sandbox. See `specs/README.md` for the source URLs and how to add another version.
 
 Tracking and auto-downloading newer versions is [issue #1](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/1).
 
@@ -58,5 +60,5 @@ Tracking and auto-downloading newer versions is [issue #1](https://github.com/th
 
 ```bash
 uv run sdwan-mcp --help
-uv run sdwan-mcp --diff 20.10 20.10    # sanity check — no diff with itself
+uv run sdwan-mcp --diff 20.15 20.18    # see what changed between bundled versions
 ```

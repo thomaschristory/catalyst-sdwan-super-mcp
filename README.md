@@ -20,7 +20,7 @@ git clone https://github.com/thomaschristory/catalyst-sdwan-super-mcp.git
 cd catalyst-sdwan-super-mcp
 uv sync
 
-# Credentials for Cisco's public always-on SD-WAN sandbox (20.10)
+# Credentials for Cisco's public always-on SD-WAN sandbox
 cat > .env <<'EOF'
 VMANAGE_USERNAME=devnetuser
 VMANAGE_PASSWORD=RG!_Yw919_83
@@ -29,7 +29,9 @@ EOF
 uv run sdwan-mcp        # stdio, read-only, granularity=section
 ```
 
-The shipped `config.yaml` points at `sandbox-sdwan-2.cisco.com` and ships the 20.10 spec in `specs/20.10/`. You don't need a vManage of your own to try it.
+The shipped `config.yaml` points at `sandbox-sdwan-2.cisco.com` and ships specs for vManage 20.15, 20.16, and 20.18 in `specs/`. 20.18 is the default. You don't need a vManage of your own to try it.
+
+**Supported vManage versions: 20.15+.** Older releases are out of scope — see [issue #13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13).
 
 ---
 
@@ -39,17 +41,17 @@ The shipped `config.yaml` points at `sandbox-sdwan-2.cisco.com` and ships the 20
 - **Read-only by default.** `--read-write` registers POST/PUT/DELETE/PATCH explicitly.
 - **Two auth modes:** JWT (vManage 20.18.1+) and JSESSIONID + XSRF (older).
 - **Three transports:** stdio, SSE, streamable-HTTP.
-- **Version diff:** `sdwan-mcp --diff 20.10 20.18` shows added/removed/changed operations before upgrade.
+- **Version diff:** `sdwan-mcp --diff 20.15 20.18` shows added/removed/changed operations before upgrade.
 - **Docker:** multi-stage image, specs mounted as a volume so versions ship without rebuilding.
 
 ---
 
 ## Tool granularity at a glance
 
-| Granularity | What it groups | Tools on 20.10 (RW) | Best for |
+| Granularity | What it groups | Tools on 20.18 (RW) | Best for |
 |---|---|---|---|
-| `section` (default) | Top-level section, e.g. `Configuration` | 38 | Most LLM clients. |
-| `tag` | Full Cisco tag, e.g. `Configuration - Feature Profile (SDWAN)` | 304 | Clients that handle hundreds of tools and benefit from narrower descriptions. |
+| `section` (default) | Top-level section, e.g. `Configuration` | ~65 | Most LLM clients. |
+| `tag` | Full Cisco tag, e.g. `Configuration - Feature Profile (SDWAN)` | ~375 | Clients that handle hundreds of tools and benefit from narrower descriptions. |
 
 See [docs/guides/granularity.md](docs/guides/granularity.md) for the tradeoff.
 

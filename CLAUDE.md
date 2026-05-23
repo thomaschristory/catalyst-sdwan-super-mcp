@@ -39,17 +39,24 @@ uv run sdwan-mcp --help
 The server reads the OpenAPI spec at startup and registers MCP tools dynamically.
 Upgrading to a new vManage version = drop a new spec folder + change one config line.
 
+### Supported vManage versions
+
+**20.15+ only.** Pre-20.15 specs are not bundled and not supported — see
+issue [#13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13)
+for the analysis. The repo ships 20.15, 20.16, and 20.18 specs; 20.18 is the default.
+
 ### Two grouping granularities
 
 Cisco's OpenAPI tags look like `Monitoring - Device Details` and
 `Configuration - Feature Profile (SDWAN)`. We support two grouping modes:
 
 - **`section`** (default) — group by the first word, e.g. `Configuration`.
-  On vManage 20.10 this collapses to **~38 tools**, which most LLM clients handle well.
-- **`tag`** — group by the full tag, yielding ~300 tools on 20.10. Use when your
+  On vManage 20.18 this collapses to ~65 tools.
+- **`tag`** — group by the full tag, yielding ~375 tools on 20.18. Use when your
   client can ingest hundreds of tools and you want narrower per-tool descriptions.
 
 Configurable via `sdwan.tag_granularity` in `config.yaml` or `--granularity` on the CLI.
+(This dual-mode logic is being replaced by an adaptive splitter — see issue #13.)
 
 ### Tool shape
 
@@ -138,7 +145,9 @@ catalyst-sdwan-super-mcp/
     architecture/{overview,data-flow}.md
     contributing/{development,release-process}.md
   specs/                      OpenAPI documents, one folder per version
-    20.10/vmanageapi_2010.json    ← bundled (matches DevNet sandbox)
+    20.15/vmanageapi_2015.yaml    ← bundled
+    20.16/vmanageapi_2016.yaml    ← bundled
+    20.18/vmanageapi_2018.yaml    ← bundled (default; matches DevNet sandbox)
   .github/
     workflows/{lint,test,docs,docker,release}.yml
     ISSUE_TEMPLATE/{bug,feature}.yml
@@ -171,12 +180,12 @@ vmanage:
   verify_ssl: false
   username: "${VMANAGE_USERNAME}"
   password: "${VMANAGE_PASSWORD}"
-  use_jwt: false                    # false for 20.10; true for 20.18.1+
+  use_jwt: true                     # 20.15+ supports JWT; set false to force session
 
 sdwan:
   specs_dir: ./specs
-  active_version: "20.10"
-  tag_granularity: section          # "section" (~30-40 tools) or "tag" (300+)
+  active_version: "20.18"
+  tag_granularity: section          # "section" (~30-65 tools) or "tag" (300+)
 
 transport:
   mode: stdio                       # stdio | sse | streamable-http
@@ -193,9 +202,9 @@ sdwan-mcp                                          # stdio, RO, version from con
 sdwan-mcp --transport sse --port 8000              # SSE transport
 sdwan-mcp --transport streamable-http              # streamable HTTP
 sdwan-mcp --read-write                             # enable mutations
-sdwan-mcp --version 20.10                          # override spec version
+sdwan-mcp --version 20.15                          # override spec version
 sdwan-mcp --granularity tag                        # override granularity
-sdwan-mcp --diff 20.10 20.18                       # diff two versions and exit
+sdwan-mcp --diff 20.15 20.18                       # diff two versions and exit
 sdwan-mcp --config /path/to/config.yaml            # custom config file
 ```
 
@@ -309,13 +318,13 @@ On expiry → `auth.login()` again → retry once.
 ## Diff utility (diff.py)
 
 ```bash
-uv run sdwan-mcp --diff 20.10 20.18
+uv run sdwan-mcp --diff 20.15 20.18
 ```
 
 Output:
 
 ```
-=== SD-WAN API Diff: 20.10 → 20.18 ===
+=== SD-WAN API Diff: 20.15 → 20.18 ===
 
 REMOVED (breaking):
   - getVedgeList  [Monitoring - Device Details]  GET /device/vedge
@@ -337,14 +346,15 @@ CHANGED (parameter drift):
 | Language | Python ≥ 3.11 | Simpler local iteration, no build step |
 | MCP framework | fastmcp | Minimal boilerplate |
 | Packaging | hatchling + uv | Matches netbox-super-cli |
-| Tool grouping | One per **section** by default | 20.10 has 304 tags — too many. Section yields ~38 tools. `tag` mode still available. |
+| Tool grouping | One per **section** by default | 20.18 has 375 tags — too many. Section yields ~65 tools. `tag` mode still available pending the adaptive splitter (#13). |
+| Supported versions | 20.15+ only | Pre-20.15 specs use numeric-suffix operationIds that churn between minor releases; not worth the special-case shims (#13). |
 | Params shape | `(action: str, params: dict)` | Scales with tag size; description documents per-action params |
 | RO/RW | Flag at runtime | Safe default, explicit opt-in for mutations |
 | Auth | Username/password → JWT or session | Matches actual vManage auth flow; API tokens require extra config |
 | JWT vs session | JWT default, session fallback | JWT is simpler (one call); session needed for older deployments incl. the DevNet sandbox |
 | Cookie handling | httpx jar auto-manages JSESSIONID | Sending a manual `Cookie:` header alongside the jar produces dupes and vManage rejects |
 | Spec versioning | Drop folder + config line | No codegen, easy upgrade path |
-| Spec formats | YAML, YML, **and JSON** | Cisco DevNet publishes the 20.10 spec as JSON |
+| Spec formats | YAML, YML, **and JSON** | Cisco publishes 20.15 as YAML-with-`.json`-extension, 20.16/20.18 as plain YAML; we accept all three extensions. |
 | Transport | Flag at runtime | stdio for local, SSE/HTTP for remote/tunneled |
 | Docker | Volume-mounted specs | Upgrade specs without rebuilding image |
 

@@ -6,11 +6,11 @@ vmanage:
   verify_ssl: false
   username: "${VMANAGE_USERNAME}"
   password: "${VMANAGE_PASSWORD}"
-  use_jwt: false           # 20.10 doesn't support the modern JWT endpoint -> use session
+  use_jwt: true            # 20.15+ supports the modern JWT endpoint; set false to force session
 
 sdwan:
   specs_dir: ./specs
-  active_version: "20.10"
+  active_version: "20.18"
   tag_granularity: section  # "section" (~30-40 tools) | "tag" (300+ tools)
 
 transport:
