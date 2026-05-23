@@ -22,7 +22,7 @@ def test_diff_detects_added_removed_changed(tmp_path: Path) -> None:
     new_spec = copy.deepcopy(MINIMAL_SPEC)
 
     # Removed: drop getDeviceCount
-    del new_spec["paths"]["/count"]
+    del new_spec["paths"]["/devices/count"]
     # Added: new operation
     new_spec["paths"]["/health"] = {
         "get": {
@@ -32,7 +32,7 @@ def test_diff_detects_added_removed_changed(tmp_path: Path) -> None:
         },
     }
     # Changed: add a query param to listAllDevices
-    new_spec["paths"]["/device"]["get"]["parameters"].append(
+    new_spec["paths"]["/devices"]["get"]["parameters"].append(
         {
             "name": "includeOffline",
             "in": "query",

@@ -11,7 +11,7 @@ vmanage:
 sdwan:
   specs_dir: ./specs
   active_version: "20.18"
-  tag_granularity: section  # "section" (~30-40 tools) | "tag" (300+ tools)
+  max_actions_per_tool: 150  # adaptive splitter cap; 0 disables splitting (one tool per section)
 
 transport:
   mode: stdio             # stdio | sse | streamable-http
