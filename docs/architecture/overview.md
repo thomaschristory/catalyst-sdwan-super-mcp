@@ -47,4 +47,4 @@ Cisco ships a fresh spec every minor release. With 2,000+ operations, hand-gener
 - The MCP tool descriptions are *always* the spec the server is actually talking to.
 - The diff utility tells you what changed at a glance.
 
-Same model as [`netbox-super-cli`](https://github.com/thomaschristory/netbox-super-cli).
+Derives everything directly from the upstream Cisco vManage specification.

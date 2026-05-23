@@ -4,8 +4,8 @@
 
 A FastMCP server that exposes the Cisco Catalyst SD-WAN Manager (vManage) REST API
 as MCP tools, with dynamic spec loading so it stays in sync as the API evolves
-across versions. Same pattern as `netbox-super-cli`: no codegen — derive everything
-from the upstream OpenAPI spec.
+across versions. Key pattern: no codegen — derive everything directly from the upstream
+OpenAPI spec.
 
 Public repo: <https://github.com/thomaschristory/catalyst-sdwan-super-mcp>.
 Docs: <https://thomaschristory.github.io/catalyst-sdwan-super-mcp/>.
@@ -336,7 +336,7 @@ CHANGED (parameter drift):
 |---|---|---|
 | Language | Python ≥ 3.11 | Simpler local iteration, no build step |
 | MCP framework | fastmcp | Minimal boilerplate |
-| Packaging | hatchling + uv | Matches netbox-super-cli |
+| Packaging | hatchling + uv | Standard modern python packaging |
 | Tool grouping | One per **section** by default | 20.10 has 304 tags — too many. Section yields ~38 tools. `tag` mode still available. |
 | Params shape | `(action: str, params: dict)` | Scales with tag size; description documents per-action params |
 | RO/RW | Flag at runtime | Safe default, explicit opt-in for mutations |
