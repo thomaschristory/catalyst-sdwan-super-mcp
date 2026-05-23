@@ -360,6 +360,55 @@ CHANGED (parameter drift):
 
 ---
 
+## Security & contribution gates
+
+Public-repo posture (applies to `main` and to fork PRs from untrusted contributors).
+
+### Branch protection on `main`
+
+Configured via `gh api -X PUT repos/.../branches/main/protection`. Current state:
+
+| Setting | Value | Why |
+|---|---|---|
+| `required_status_checks` | `lint`, `test (ubuntu-latest, 3.12)`, `strict: true` | Block merges where CI is red or stale relative to main. |
+| `required_pull_request_reviews.required_approving_review_count` | **1** | No code lands on `main` without at least one approving review. Stops a hostile or low-quality PR from being silently merged. |
+| `enforce_admins` | **false** | Solo-maintainer trade-off: admins can self-merge their own PRs (GitHub disallows self-approval). With `enforce_admins: true` + reviews=1 the maintainer would be locked out of merging anything alone. |
+| `required_conversation_resolution` | true | Forces explicit "done" on every review comment. |
+| `allow_force_pushes` / `allow_deletions` | false | Standard protection of `main` history. |
+| `required_linear_history` | false | We don't insist on linear history; squash-merge of well-named PRs is fine. |
+
+### Fork PR workflow approval (manual UI step)
+
+GitHub does not expose this via REST API for public repos, so it must be set in the web UI:
+
+> Repo → Settings → Actions → General → **Fork pull request workflows from outside collaborators** → choose **"Require approval for first-time contributors"** (recommended) or stricter.
+
+This means a fork PR from a brand-new account won't even trigger CI until the maintainer clicks Approve, which kills a class of supply-chain noise (resource use, CI log scraping, and the ability to test workflow-injection attempts).
+
+### Triggers that touch secrets
+
+Only one workflow in the repo uses the dangerous `pull_request_target` trigger:
+
+- `.github/workflows/dependabot-auto-merge.yml` — gated by `if: github.actor == 'dependabot[bot]'`, so a non-dependabot author cannot reach the privileged code path.
+
+All other workflows (`lint.yml`, `test.yml`, `docker.yml`, `docs.yml`) use `pull_request`, which means fork PRs run in the restricted, no-secrets context. **Never switch any of these to `pull_request_target` without re-reading [Keeping your GitHub Actions secure: pwn requests](https://securitylab.github.com/research/github-actions-preventing-pwn-requests/).**
+
+### Reviewing PRs from unknown contributors
+
+For PRs from authors not previously known to the project:
+
+1. Look at the author's GH profile: account age, repo mix (mostly forks?), event log pattern (drive-by `issue-N-*` branches across many unrelated repos?), commit-email vs. GH-name mismatch. These don't determine intent on their own, but raise the bar for review.
+2. Adversarial diff scan: any new top-level imports, any `subprocess`/`exec`/`eval`, any new network calls, any `verify=False`, any logging that could echo `Authorization` / `Cookie` / `X-XSRF-TOKEN`, any new workflow triggers (especially `pull_request_target`, `workflow_run`), any pre/post-install hooks in `pyproject.toml`.
+3. For workflow file changes: confirm no new `secrets.*` access, no shell interpolation of `${{ github.event.* }}` fields without quoting, no new third-party action references without a pinned full-commit SHA.
+
+A clean diff from a sketchy profile is still mergeable — but **never auto-merge from a first-time contributor**, even if all status checks pass.
+
+### Reference incident
+
+PR #15 (closed without merge, 2026-05-24) is a worked example of this review pattern: see PR thread and the contributor profile of `qorexdevs`.
+
+---
+
 ## Key decisions log
 
 | Decision | Choice | Reason |
