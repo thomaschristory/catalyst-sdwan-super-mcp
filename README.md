@@ -3,6 +3,7 @@
 [![lint](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/actions/workflows/lint.yml/badge.svg)](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/actions/workflows/lint.yml)
 [![test](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/actions/workflows/test.yml)
 [![docs](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/actions/workflows/docs.yml/badge.svg)](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/)
+[![PyPI](https://img.shields.io/pypi/v/catalyst-sdwan-super-mcp.svg)](https://pypi.org/project/catalyst-sdwan-super-mcp/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 A [FastMCP](https://gofastmcp.com) server that exposes the **Cisco Catalyst SD-WAN Manager (vManage)** REST API as MCP tools, so any MCP-compatible LLM client (Claude Desktop, Claude Code, Cursor, …) can query and manage your SD-WAN overlay.
@@ -32,6 +33,15 @@ uv run sdwan-mcp        # stdio, read-only, adaptive tool splitting (default)
 The shipped `config.yaml` points at `sandbox-sdwan-2.cisco.com` and ships specs for vManage 20.15, 20.16, and 20.18 in `specs/`. 20.18 is the default. You don't need a vManage of your own to try it.
 
 **Supported vManage versions: 20.15+.** Older releases are out of scope — see [issue #13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13).
+
+### Already have specs? Install from PyPI
+
+```bash
+uv tool install catalyst-sdwan-super-mcp
+sdwan-mcp --help
+```
+
+The PyPI package ships the server only — point `sdwan.specs_dir` in your `config.yaml` at a directory containing the OpenAPI specs (the `specs/` folder from this repo works as-is). Full instructions: [docs/getting-started/install.md](docs/getting-started/install.md).
 
 ---
 

@@ -2,7 +2,24 @@
 
 **Supports vManage 20.15+.** Older releases are out of scope.
 
-## From source (recommended for now — we're pre-PyPI)
+## From PyPI (recommended)
+
+```bash
+uv tool install catalyst-sdwan-super-mcp
+sdwan-mcp --help
+```
+
+Or with pip / pipx:
+
+```bash
+pipx install catalyst-sdwan-super-mcp
+# or
+pip install catalyst-sdwan-super-mcp
+```
+
+The PyPI install ships the package only — the OpenAPI specs live in this repo under `specs/`. Either clone the repo for the bundled specs, or point `sdwan.specs_dir` in `config.yaml` at your own copy.
+
+## From source (for development or to get the bundled specs)
 
 ```bash
 git clone https://github.com/thomaschristory/catalyst-sdwan-super-mcp.git
