@@ -1,6 +1,6 @@
 [project]
 name = "catalyst-sdwan-super-mcp"
-version = "0.0.1"
+version = "0.1.0"
 description = "FastMCP server for the Cisco Catalyst SD-WAN Manager (vManage) API, generated dynamically from the official OpenAPI specs."
 readme = "README.md"
 requires-python = ">=3.11"

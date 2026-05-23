@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-23
+
+### Added
+- Publish to PyPI from the release workflow via trusted publishing (OIDC, no API token). Installable with `uv tool install catalyst-sdwan-super-mcp`. ([#12](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/12))
+- Adaptive tool splitting (`max_actions_per_tool`, default 150) with section → sub-tag → URL-path recursion. ([#13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13))
+- Stable derived action names (independent of Cisco's churning `operationId`s).
+
 ## [0.0.1] - 2026-05-22
 
 Initial alpha release.
