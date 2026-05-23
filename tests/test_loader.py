@@ -367,5 +367,5 @@ def test_action_names_are_deduplicated_within_a_tool(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_default_max_actions_per_tool_is_50() -> None:
-    assert DEFAULT_MAX_ACTIONS_PER_TOOL == 50
+def test_default_max_actions_per_tool_is_150() -> None:
+    assert DEFAULT_MAX_ACTIONS_PER_TOOL == 150

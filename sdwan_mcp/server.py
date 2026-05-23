@@ -89,7 +89,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help=(
             "Adaptive splitter cap: any tool with more than N actions is split further. "
-            "0 disables splitting (one tool per section). Overrides config.yaml (default 50)."
+            "0 disables splitting (one tool per section). Overrides config.yaml (default 150)."
         ),
     )
     return parser.parse_args(argv)

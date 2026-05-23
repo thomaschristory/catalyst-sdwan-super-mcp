@@ -44,7 +44,7 @@ RW_METHODS = frozenset({"get", "post", "put", "delete", "patch"})
 
 SKIP_METHODS = frozenset({"head", "options", "trace"})
 
-DEFAULT_MAX_ACTIONS_PER_TOOL = 50
+DEFAULT_MAX_ACTIONS_PER_TOOL = 150
 PATH_SPLIT_START_DEPTH = 3
 PATH_SPLIT_MAX_DEPTH = 5
 MISC_BUCKET_THRESHOLD = 4  # sub-tags / path buckets with fewer ops collapse to <parent>_misc
