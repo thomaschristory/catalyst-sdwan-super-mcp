@@ -13,7 +13,7 @@ body:
     id: spec-version
     attributes:
       label: vManage / spec version
-      placeholder: "20.10"
+      placeholder: "20.18"
   - type: input
     id: client
     attributes:

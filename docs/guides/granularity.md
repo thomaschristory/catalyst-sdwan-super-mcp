@@ -1,13 +1,15 @@
 # Tool granularity
 
-The vManage API is huge — 20.10 has **2,983 operations** spread over **304 OpenAPI tags**. Naively mapping one MCP tool per tag gives an LLM 300+ tools, which most clients (and most LLMs) cannot ingest cleanly.
+The vManage API is huge — 20.18 has **4,102 operations** spread over **375 OpenAPI tags**. Naively mapping one MCP tool per tag gives an LLM 300+ tools, which most clients (and most LLMs) cannot ingest cleanly.
 
 So we offer two granularities:
 
-| Granularity | What it groups | Tools (20.10, RW) | Use when |
+| Granularity | What it groups | Tools (20.18, RW) | Use when |
 |---|---|---|---|
-| `section` (default) | First word before " - " | **38** | You want the LLM to find anything across the API. |
-| `tag` | Full Cisco tag | **304** | Your client can handle hundreds of tools and you want narrower descriptions. |
+| `section` (default) | First word before " - " | **~65** | You want the LLM to find anything across the API. |
+| `tag` | Full Cisco tag | **~375** | Your client can handle hundreds of tools and you want narrower descriptions. |
+
+> **Note:** this two-mode toggle is being replaced by an adaptive splitter — see issue [#13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13).
 
 ## How grouping works
 

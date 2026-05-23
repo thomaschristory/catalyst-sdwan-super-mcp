@@ -11,11 +11,11 @@ vmanage:
   verify_ssl: false                 # default: false
   username: "${VMANAGE_USERNAME}"   # required (use env var)
   password: "${VMANAGE_PASSWORD}"   # required (use env var)
-  use_jwt: false                    # default: true. Set to false for vManage < 20.18.1.
+  use_jwt: true                     # default: true. Set to false to force JSESSIONID + XSRF fallback.
 
 sdwan:
   specs_dir: ./specs                # default: ./specs
-  active_version: "20.10"           # required — must match a folder in specs_dir
+  active_version: "20.18"           # required — must match a folder in specs_dir (20.15, 20.16, 20.18 bundled)
   tag_granularity: section          # default: "section". Options: "section" | "tag"
 
 transport:

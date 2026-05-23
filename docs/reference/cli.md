@@ -22,7 +22,7 @@ sdwan-mcp [-h] [--version-info]
 | `--read-write` | off | Enable POST/PUT/DELETE/PATCH. |
 | `--version VERSION` | from config | Override the active spec version. |
 | `--diff OLD NEW` | n/a | Print a diff between two spec versions, then exit. |
-| `--granularity` | from config (`section`) | `section` (~30-40 tools) or `tag` (300+). |
+| `--granularity` | from config (`section`) | `section` (~65 tools) or `tag` (~375). |
 | `--version-info` | n/a | Print version and exit. |
 
 ## Examples
@@ -38,7 +38,7 @@ sdwan-mcp --read-write --transport sse --host 0.0.0.0 --port 8000
 sdwan-mcp --version 20.18
 
 # Diff before upgrade
-sdwan-mcp --diff 20.10 20.18
+sdwan-mcp --diff 20.15 20.18
 
 # Crank tools up to 11
 sdwan-mcp --granularity tag
