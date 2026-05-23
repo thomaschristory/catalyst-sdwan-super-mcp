@@ -4,12 +4,12 @@
 
 ```
 specs/
-  20.10/
-    vmanageapi_2010.json     # one file or many — loader globs *.yaml *.yml *.json
   20.15/
-    ...
+    vmanageapi_2015.yaml     # one file or many — loader globs *.yaml *.yml *.json
+  20.16/
+    vmanageapi_2016.yaml
   20.18/
-    ...
+    vmanageapi_2018.yaml
 ```
 
 The folder name is the version key. `config.yaml`'s `sdwan.active_version` picks which one to load.
@@ -21,7 +21,7 @@ The folder name is the version key. `config.yaml`'s `sdwan.active_version` picks
 3. Run a diff so you know what changed:
 
     ```bash
-    uv run sdwan-mcp --diff 20.10 20.18
+    uv run sdwan-mcp --diff 20.15 20.18
     ```
 
 4. Update `config.yaml`:
@@ -36,7 +36,7 @@ The folder name is the version key. `config.yaml`'s `sdwan.active_version` picks
 ## Diff output
 
 ```text
-=== SD-WAN API Diff: 20.10 → 20.18 ===
+=== SD-WAN API Diff: 20.15 → 20.18 ===
 
 REMOVED (3 operations — potentially breaking):
   - getVedgeList  [Monitoring - Device Details]  GET /device/vedge

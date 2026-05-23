@@ -56,7 +56,7 @@ nav:
   - Guides:
       - MCP clients: guides/mcp-clients.md
       - Read-only vs read-write: guides/read-write.md
-      - Tool granularity: guides/granularity.md
+      - Tool splitting: guides/tool-splitting.md
       - Spec versions and diff: guides/spec-versions.md
       - Docker: guides/docker.md
   - Reference:

@@ -17,7 +17,7 @@ This registers the rest of the HTTP verbs (`POST`, `PUT`, `DELETE`, `PATCH`).
 The server's startup log tells you what it loaded:
 
 ```
-[loader] Mode=RW: kept 2983 operations, filtered out 0 write operations
+[loader] Mode=RW, max_actions_per_tool=150 -> 360 tool(s), 4102 operations
 ```
 
 ## Recommended workflow

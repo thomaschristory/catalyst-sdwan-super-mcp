@@ -32,11 +32,11 @@
 | Module | Responsibility |
 |---|---|
 | `config.py` | Load `config.yaml`, interpolate `${VAR}`, validate. |
-| `loader.py` | Read OpenAPI spec files, group operations by tag (or section), filter by RO/RW, build a flat operationId → op index. |
+| `loader.py` | Read OpenAPI spec files, [adaptively split](../guides/tool-splitting.md) operations into tools (section → sub-tag → URL path), filter by RO/RW, derive stable `action_name` per op, build a flat `action_name → op` index. |
 | `auth.py` | Two login flows (JWT and legacy session), header injection, proactive refresh. |
-| `dispatcher.py` | One `httpx.AsyncClient` per server. Routes params (path / query / body), executes, retries once on session expiry. |
+| `dispatcher.py` | One `httpx.AsyncClient` per server. Looks ops up by `action_name`, routes params (path / query / body), executes, retries once on session expiry. |
 | `tools.py` | Register one FastMCP tool per group, with `(action, params)` signature. |
-| `diff.py` | Compare two spec versions — added / removed / changed operations. |
+| `diff.py` | Compare two spec versions — added / removed / changed operations. Uses Cisco's `operationId` (preserved on `OperationSpec` as a back-reference) so the diff matches Cisco's own identifiers. |
 | `server.py` | CLI parsing, async pre-flight, lifecycle. |
 
 ## Why dynamic instead of generated?
@@ -46,5 +46,3 @@ Cisco ships a fresh spec every minor release. With 2,000+ operations, hand-gener
 - A new vManage version is one folder + one config line.
 - The MCP tool descriptions are *always* the spec the server is actually talking to.
 - The diff utility tells you what changed at a glance.
-
-Same model as [`netbox-super-cli`](https://github.com/thomaschristory/netbox-super-cli).

@@ -61,9 +61,9 @@ class Dispatcher:
         """Attach the spec index so the dispatcher can resolve operationIds."""
         self._index = index
 
-    async def call(self, operation_id: str, params: dict) -> dict:
+    async def call(self, action_name: str, params: dict) -> dict:
         """
-        Execute an API call for the given operationId.
+        Execute an API call for the given derived action name.
 
         params: flat dict — dispatcher splits into path / query / body
                 based on the spec definition.
@@ -71,12 +71,12 @@ class Dispatcher:
         if self._index is None:
             raise RuntimeError("SpecIndex not set — call set_index() first")
 
-        op = self._index.by_operation_id.get(operation_id)
+        op = self._index.by_action_name.get(action_name)
         if op is None:
             return {
                 "error": True,
                 "message": (
-                    f"Unknown operationId: '{operation_id}'. "
+                    f"Unknown action: '{action_name}'. "
                     f"Check the tool description for valid action names."
                 ),
             }
@@ -129,7 +129,7 @@ class Dispatcher:
 
         if unknown_params:
             print(
-                f"[dispatcher] WARNING: unrecognised params for '{op.operation_id}': "
+                f"[dispatcher] WARNING: unrecognised params for '{op.action_name}': "
                 f"{list(unknown_params.keys())} — forwarding as query params"
             )
             query_params.update(unknown_params)
@@ -145,7 +145,7 @@ class Dispatcher:
             return {
                 "error": True,
                 "message": (
-                    f"Missing required path param(s) for '{op.operation_id}': {missing}. "
+                    f"Missing required path param(s) for '{op.action_name}': {missing}. "
                     f"Provide them in the params dict."
                 ),
             }
