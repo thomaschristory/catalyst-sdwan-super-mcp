@@ -22,3 +22,5 @@ jobs:
         run: uv run ruff check sdwan_mcp tests
       - name: Ruff format check
         run: uv run ruff format --check sdwan_mcp tests
+      - name: Mypy strict
+        run: uv run mypy --strict sdwan_mcp

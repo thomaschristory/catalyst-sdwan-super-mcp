@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -95,25 +96,32 @@ def _slugify(tag: str) -> str:
     )
 
 
-def _extract_type(schema: dict) -> str:
+def _extract_type(schema: dict[str, Any]) -> str:
     if not schema:
         return "string"
     if "$ref" in schema:
         return "object"
-    return schema.get("type", "string")
+    schema_type = schema.get("type")
+    return schema_type if isinstance(schema_type, str) else "string"
 
 
-def _parse_parameters(raw_params: list[dict]) -> list[ParameterSpec]:
-    result = []
+def _parse_parameters(raw_params: list[dict[str, Any]]) -> list[ParameterSpec]:
+    result: list[ParameterSpec] = []
     for p in raw_params or []:
-        schema = p.get("schema", {})
+        schema_obj = p.get("schema", {})
+        schema = schema_obj if isinstance(schema_obj, dict) else {}
+        name = p.get("name", "")
+        location = p.get("in", "query")
+        required = p.get("required", False)
+        description = p.get("description", "")
+
         result.append(
             ParameterSpec(
-                name=p.get("name", ""),
-                location=p.get("in", "query"),
-                required=p.get("required", False),
+                name=name if isinstance(name, str) else "",
+                location=location if isinstance(location, str) else "query",
+                required=required if isinstance(required, bool) else False,
                 type=_extract_type(schema),
-                description=p.get("description", ""),
+                description=description if isinstance(description, str) else "",
                 default=schema.get("default"),
             )
         )
@@ -123,21 +131,42 @@ def _parse_parameters(raw_params: list[dict]) -> list[ParameterSpec]:
 def _parse_operation(
     path: str,
     method: str,
-    operation: dict,
+    operation: dict[str, Any],
     tag: str,
 ) -> OperationSpec:
     has_body = "requestBody" in operation
-    body_desc = ""
+    body_desc = "Request body (JSON)" if has_body else ""
     if has_body:
-        body_desc = operation["requestBody"].get("description", "Request body (JSON)")
+        request_body = operation.get("requestBody", {})
+        if isinstance(request_body, dict):
+            description = request_body.get("description")
+            if isinstance(description, str) and description:
+                body_desc = description
+
+    operation_id = operation.get("operationId")
+    if not isinstance(operation_id, str) or not operation_id:
+        operation_id = f"{method}_{path}"
+
+    summary = operation.get("summary")
+    description = operation.get("description")
+    summary_text = summary if isinstance(summary, str) else ""
+    if not summary_text and isinstance(description, str):
+        summary_text = description
+
+    raw_params_obj = operation.get("parameters", [])
+    raw_params: list[dict[str, Any]] = []
+    if isinstance(raw_params_obj, list):
+        for item in raw_params_obj:
+            if isinstance(item, dict):
+                raw_params.append(item)
 
     return OperationSpec(
-        operation_id=operation.get("operationId", f"{method}_{path}"),
-        summary=operation.get("summary") or operation.get("description", ""),
+        operation_id=operation_id,
+        summary=summary_text,
         method=method,
         path=path,
         tag=tag,
-        parameters=_parse_parameters(operation.get("parameters", [])),
+        parameters=_parse_parameters(raw_params),
         has_body=has_body,
         body_description=body_desc,
     )
@@ -189,7 +218,7 @@ class SpecLoader:
     # Step 1: load all sub-spec YAMLs and merge into one dict
     # ------------------------------------------------------------------
 
-    def _load_and_merge(self) -> dict:
+    def _load_and_merge(self) -> dict[str, Any]:
         spec_files = sorted(
             list(self.version_dir.glob("*.yaml"))
             + list(self.version_dir.glob("*.yml"))
@@ -200,10 +229,8 @@ class SpecLoader:
                 f"No spec files (*.yaml | *.yml | *.json) found in {self.version_dir}"
             )
 
-        merged: dict = {
-            "paths": {},
-            "components": {"schemas": {}},
-        }
+        merged_paths: dict[str, Any] = {}
+        merged_schemas: dict[str, Any] = {}
 
         for spec_file in spec_files:
             print(f"[loader] Loading {spec_file.name}")
@@ -211,44 +238,71 @@ class SpecLoader:
                 if spec_file.suffix == ".json":
                     import json
 
-                    spec = json.loads(spec_file.read_text())
+                    spec_obj = json.loads(spec_file.read_text())
                 else:
-                    spec = yaml.safe_load(spec_file.read_text())
+                    spec_obj = yaml.safe_load(spec_file.read_text())
             except (yaml.YAMLError, ValueError) as e:
                 print(f"[loader] WARNING: Failed to parse {spec_file.name}: {e}")
                 continue
 
+            if not isinstance(spec_obj, dict):
+                print(f"[loader] WARNING: Skipping {spec_file.name}: root is not an object")
+                continue
+
             # Last-writer-wins on conflict (Cisco sub-specs are non-overlapping)
-            merged["paths"].update(spec.get("paths", {}))
+            raw_paths = spec_obj.get("paths", {})
+            if isinstance(raw_paths, dict):
+                merged_paths.update(raw_paths)
 
-            components = spec.get("components", {})
-            merged["components"]["schemas"].update(components.get("schemas", {}))
+            components = spec_obj.get("components", {})
+            if isinstance(components, dict):
+                schemas = components.get("schemas", {})
+                if isinstance(schemas, dict):
+                    merged_schemas.update(schemas)
 
-        print(f"[loader] Loaded {len(spec_files)} spec file(s), {len(merged['paths'])} total paths")
+        merged: dict[str, Any] = {
+            "paths": merged_paths,
+            "components": {"schemas": merged_schemas},
+        }
+        print(f"[loader] Loaded {len(spec_files)} spec file(s), {len(merged_paths)} total paths")
         return merged
 
     # ------------------------------------------------------------------
     # Step 2: group operations by their first tag
     # ------------------------------------------------------------------
 
-    def _group_by_tag(self, spec: dict) -> list[TagGroup]:
+    def _group_by_tag(self, spec: dict[str, Any]) -> list[TagGroup]:
         groups: dict[str, TagGroup] = {}
 
-        for path, path_item in spec.get("paths", {}).items():
+        paths = spec.get("paths", {})
+        if not isinstance(paths, dict):
+            return []
+
+        for path, path_item in paths.items():
+            if not isinstance(path, str) or not isinstance(path_item, dict):
+                continue
+
             for method, operation in path_item.items():
-                if method.lower() in SKIP_METHODS:
+                if not isinstance(method, str):
+                    continue
+                method_lower = method.lower()
+                if method_lower in SKIP_METHODS:
                     continue
                 if not isinstance(operation, dict):
                     continue
 
-                tags = operation.get("tags", ["untagged"])
-                full_tag = tags[0]
+                tags_obj = operation.get("tags", ["untagged"])
+                full_tag = "untagged"
+                if isinstance(tags_obj, list) and tags_obj:
+                    first = tags_obj[0]
+                    if isinstance(first, str) and first:
+                        full_tag = first
                 group_key = self._group_key(full_tag)
 
                 if group_key not in groups:
                     groups[group_key] = TagGroup(tag=group_key, slug=_slugify(group_key))
 
-                op = _parse_operation(path, method.lower(), operation, full_tag)
+                op = _parse_operation(path, method_lower, operation, full_tag)
                 groups[group_key].operations.append(op)
 
         result = list(groups.values())

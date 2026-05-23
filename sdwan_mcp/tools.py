@@ -16,17 +16,19 @@ in the loop. The default arg forces value capture at definition time.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastmcp import FastMCP
 
-from .dispatcher import Dispatcher
-from .loader import SpecIndex, TagGroup
+from .dispatcher import Dispatcher, DispatchResult
+from .loader import ParameterSpec, SpecIndex, TagGroup
 
 # ---------------------------------------------------------------------------
 # Description builder
 # ---------------------------------------------------------------------------
 
 
-def _format_param(p) -> str:
+def _format_param(p: ParameterSpec) -> str:
     req = "" if p.required else "?"
     desc = f" — {p.description}" if p.description else ""
     default = f" (default: {p.default})" if p.default is not None else ""
@@ -94,11 +96,11 @@ def _register_group_tool(
     # and would all point to the last group after the loop completes.
     async def tool_handler(
         action: str,
-        params: dict | None = None,
-        _valid: frozenset = valid_op_ids,
+        params: dict[str, Any] | None = None,
+        _valid: frozenset[str] = valid_op_ids,
         _name: str = tool_name,
         _dispatcher: Dispatcher = dispatcher,
-    ) -> dict:
+    ) -> DispatchResult:
         if action not in _valid:
             return {
                 "error": True,

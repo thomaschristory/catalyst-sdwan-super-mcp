@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from typing import Literal, cast
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
@@ -27,6 +28,8 @@ from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
 from .loader import SpecLoader
 from .tools import register_tools
+
+TransportMode = Literal["stdio", "sse", "streamable-http"]
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -112,13 +115,16 @@ def run_diff(specs_dir: str, old_version: str, new_version: str) -> None:
 
 async def _connect_and_register(
     args: argparse.Namespace,
-) -> tuple[FastMCP, Dispatcher, str, str, int]:
+) -> tuple[FastMCP, Dispatcher, TransportMode, str, int]:
     """Async pre-flight: load config, log in to vManage, register tools."""
     load_dotenv()
     config = load_config(args.config)
 
     version = args.version or config.sdwan.active_version
     transport = args.transport or config.transport.mode
+    if transport not in {"stdio", "sse", "streamable-http"}:
+        raise ValueError(f"Unsupported transport: {transport}")
+    transport_mode = cast(TransportMode, transport)
     host = args.host or config.transport.host
     port = args.port or config.transport.port
     read_write = args.read_write
@@ -126,9 +132,9 @@ async def _connect_and_register(
     print("[server] SD-WAN Super MCP")
     print(f"[server] Spec version : {version}")
     print(f"[server] Mode         : {'READ-WRITE' if read_write else 'READ-ONLY'}")
-    print(f"[server] Transport    : {transport}")
+    print(f"[server] Transport    : {transport_mode}")
     print(f"[server] Auth         : {'JWT' if config.vmanage.use_jwt else 'Session'}")
-    if transport != "stdio":
+    if transport_mode != "stdio":
         print(f"[server] Listening on : {host}:{port}")
     print()
 
@@ -169,9 +175,9 @@ async def _connect_and_register(
     )
 
     tool_count = register_tools(mcp, index, dispatcher)
-    print(f"[server] {tool_count} tools registered — starting {transport} transport\n")
+    print(f"[server] {tool_count} tools registered — starting {transport_mode} transport\n")
 
-    return mcp, dispatcher, transport, host, port
+    return mcp, dispatcher, transport_mode, host, port
 
 
 def build_and_run(args: argparse.Namespace) -> None:

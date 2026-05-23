@@ -2,6 +2,8 @@
 config.py — loads config.yaml and resolves ${ENV_VAR} interpolation.
 """
 
+from __future__ import annotations
+
 import os
 import re
 from dataclasses import dataclass, field
@@ -54,12 +56,13 @@ class AppConfig:
 # ---------------------------------------------------------------------------
 
 _ENV_RE = re.compile(r"\$\{([^}]+)\}")
+JSONValue = dict[str, "JSONValue"] | list["JSONValue"] | str | int | float | bool | None
 
 
 def _interpolate(value: str) -> str:
     """Replace ${VAR} with the corresponding environment variable."""
 
-    def replacer(match: re.Match) -> str:
+    def replacer(match: re.Match[str]) -> str:
         var_name = match.group(1)
         result = os.environ.get(var_name, "")
         if not result:
@@ -69,7 +72,7 @@ def _interpolate(value: str) -> str:
     return _ENV_RE.sub(replacer, value)
 
 
-def _interpolate_dict(obj):
+def _interpolate_dict(obj: JSONValue) -> JSONValue:
     """Recursively interpolate env vars in all string values of a dict."""
     if isinstance(obj, dict):
         return {k: _interpolate_dict(v) for k, v in obj.items()}
@@ -85,37 +88,63 @@ def _interpolate_dict(obj):
 # ---------------------------------------------------------------------------
 
 
+def _as_dict(value: JSONValue) -> dict[str, JSONValue]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _to_int(value: JSONValue, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 def load_config(path: str = "config.yaml") -> AppConfig:
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 
-    raw = yaml.safe_load(config_path.read_text())
+    raw_obj = yaml.safe_load(config_path.read_text())
+    raw: JSONValue = raw_obj if raw_obj is not None else {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"Config root must be an object, got {type(raw).__name__}")
     raw = _interpolate_dict(raw)
+    if not isinstance(raw, dict):
+        raise ValueError("Config interpolation produced an invalid root object")
 
-    vmanage_raw = raw.get("vmanage", {})
-    sdwan_raw = raw.get("sdwan", {})
-    transport_raw = raw.get("transport", {})
+    vmanage_raw = _as_dict(raw.get("vmanage"))
+    sdwan_raw = _as_dict(raw.get("sdwan"))
+    transport_raw = _as_dict(raw.get("transport"))
 
     vmanage = VManageConfig(
-        host=vmanage_raw.get("host", ""),
-        port=int(vmanage_raw.get("port", 8443)),
+        host=str(vmanage_raw.get("host", "")),
+        port=_to_int(vmanage_raw.get("port", 8443), 8443),
         verify_ssl=bool(vmanage_raw.get("verify_ssl", False)),
-        username=vmanage_raw.get("username", ""),
-        password=vmanage_raw.get("password", ""),
+        username=str(vmanage_raw.get("username", "")),
+        password=str(vmanage_raw.get("password", "")),
         use_jwt=bool(vmanage_raw.get("use_jwt", True)),
     )
 
     sdwan = SDWANConfig(
-        specs_dir=sdwan_raw.get("specs_dir", "./specs"),
+        specs_dir=str(sdwan_raw.get("specs_dir", "./specs")),
         active_version=str(sdwan_raw.get("active_version", "20.18")),
         tag_granularity=str(sdwan_raw.get("tag_granularity", "section")),
     )
 
     transport = TransportConfig(
-        mode=transport_raw.get("mode", "stdio"),
-        host=transport_raw.get("host", "127.0.0.1"),
-        port=int(transport_raw.get("port", 8000)),
+        mode=str(transport_raw.get("mode", "stdio")),
+        host=str(transport_raw.get("host", "127.0.0.1")),
+        port=_to_int(transport_raw.get("port", 8000), 8000),
     )
 
     return AppConfig(vmanage=vmanage, sdwan=sdwan, transport=transport)
