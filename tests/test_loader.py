@@ -127,9 +127,7 @@ def test_section_under_threshold_emits_one_tool(tmp_path: Path) -> None:
     )
     specs_root = _make_spec(tmp_path, "20.99", ops)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=50).load()
 
     assert [g.name for g in index.groups] == ["monitoring"]
     assert len(index.groups[0].operations) == 6
@@ -137,17 +135,11 @@ def test_section_under_threshold_emits_one_tool(tmp_path: Path) -> None:
 
 def test_section_over_threshold_splits_by_subtag(tmp_path: Path) -> None:
     """Two sub-tags, each under threshold, section total over -> split by sub-tag only."""
-    ops_a = _ops_for_subtag(
-        "Configuration", "Devices", "/devices", ["a"], count_per_leaf=30
-    )
-    ops_b = _ops_for_subtag(
-        "Configuration", "Templates", "/templates", ["b"], count_per_leaf=30
-    )
+    ops_a = _ops_for_subtag("Configuration", "Devices", "/devices", ["a"], count_per_leaf=30)
+    ops_b = _ops_for_subtag("Configuration", "Templates", "/templates", ["b"], count_per_leaf=30)
     specs_root = _make_spec(tmp_path, "20.99", ops_a + ops_b)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=50).load()
 
     names = sorted(g.name for g in index.groups)
     assert names == ["configuration_devices", "configuration_templates"]
@@ -177,9 +169,7 @@ def test_subtag_over_threshold_recurses_on_url_path(tmp_path: Path) -> None:
             )
     specs_root = _make_spec(tmp_path, "20.99", ops)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=50).load()
 
     names = sorted(g.name for g in index.groups)
     assert names == [
@@ -207,9 +197,7 @@ def test_oversize_at_max_depth_emits_warning(tmp_path: Path, capsys) -> None:
         )
     specs_root = _make_spec(tmp_path, "20.99", ops)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=50).load()
 
     out = capsys.readouterr().out
     assert "WARNING" in out and "70 actions" in out
@@ -227,20 +215,12 @@ def test_misc_collapse_boundary_at_three_vs_four_ops(tmp_path: Path) -> None:
     Sub-tag with exactly 3 ops collapses to <section>_misc;
     sub-tag with exactly 4 ops gets its own tool.
     """
-    big = _ops_for_subtag(
-        "Configuration", "Big", "/big", ["a"], count_per_leaf=51
-    )
-    three = _ops_for_subtag(
-        "Configuration", "Three", "/three", ["x"], count_per_leaf=3
-    )
-    four = _ops_for_subtag(
-        "Configuration", "Four", "/four", ["x"], count_per_leaf=4
-    )
+    big = _ops_for_subtag("Configuration", "Big", "/big", ["a"], count_per_leaf=51)
+    three = _ops_for_subtag("Configuration", "Three", "/three", ["x"], count_per_leaf=3)
+    four = _ops_for_subtag("Configuration", "Four", "/four", ["x"], count_per_leaf=4)
     specs_root = _make_spec(tmp_path, "20.99", big + three + four)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=50).load()
 
     names = {g.name: g for g in index.groups}
     # 3-op sub-tag is below MISC_BUCKET_THRESHOLD=4 -> goes to misc.
@@ -254,22 +234,16 @@ def test_misc_collapse_boundary_at_three_vs_four_ops(tmp_path: Path) -> None:
 
 def test_small_sibling_subtags_collapse_to_misc(tmp_path: Path) -> None:
     """A 50+ section with many tiny sub-tags collapses them into misc."""
-    big = _ops_for_subtag(
-        "Configuration", "Big", "/big", ["a"], count_per_leaf=51
-    )
+    big = _ops_for_subtag("Configuration", "Big", "/big", ["a"], count_per_leaf=51)
     # Three tiny sub-tags, each well below MISC_BUCKET_THRESHOLD=4.
     tinies = []
     for subtag in ["Tiny1", "Tiny2", "Tiny3"]:
         tinies.extend(
-            _ops_for_subtag(
-                "Configuration", subtag, f"/{subtag.lower()}", ["x"], count_per_leaf=2
-            )
+            _ops_for_subtag("Configuration", subtag, f"/{subtag.lower()}", ["x"], count_per_leaf=2)
         )
     specs_root = _make_spec(tmp_path, "20.99", big + tinies)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=50).load()
 
     names = {g.name for g in index.groups}
     assert "configuration_misc" in names
@@ -280,16 +254,12 @@ def test_small_sibling_subtags_collapse_to_misc(tmp_path: Path) -> None:
 
 def test_threshold_zero_disables_splitting(tmp_path: Path) -> None:
     """max_actions_per_tool=0 -> one tool per section regardless of size."""
-    ops = _ops_for_subtag(
-        "Configuration", "A", "/a", ["x"], count_per_leaf=80
-    ) + _ops_for_subtag(
+    ops = _ops_for_subtag("Configuration", "A", "/a", ["x"], count_per_leaf=80) + _ops_for_subtag(
         "Configuration", "B", "/b", ["y"], count_per_leaf=80
     )
     specs_root = _make_spec(tmp_path, "20.99", ops)
 
-    index = SpecLoader(
-        str(specs_root), "20.99", read_write=True, max_actions_per_tool=0
-    ).load()
+    index = SpecLoader(str(specs_root), "20.99", read_write=True, max_actions_per_tool=0).load()
 
     assert [g.name for g in index.groups] == ["configuration"]
     assert len(index.groups[0].operations) == 160
@@ -321,16 +291,24 @@ def test_action_name_is_independent_of_operation_id(tmp_path: Path) -> None:
     # at all — confirms by construction that op_id can't influence action_name.
     spec_old = [
         {
-            "path": path, "method": method, "tag": tag,
+            "path": path,
+            "method": method,
+            "tag": tag,
             "op_id": "editPolicyList_33",
-            "params": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}],
+            "params": [
+                {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+            ],
         }
     ]
     spec_new = [
         {
-            "path": path, "method": method, "tag": tag,
+            "path": path,
+            "method": method,
+            "tag": tag,
             "op_id": "editPolicyList_ConfigurationPolicySiteListBuilder_3103",
-            "params": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}],
+            "params": [
+                {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+            ],
         }
     ]
 
@@ -343,7 +321,10 @@ def test_action_name_is_independent_of_operation_id(tmp_path: Path) -> None:
     assert "put_policy_site_list_builder_site" in old_idx.by_action_name
     assert "put_policy_site_list_builder_site" in new_idx.by_action_name
     # operationIds remain the back-reference, and differ across versions.
-    assert old_idx.by_action_name["put_policy_site_list_builder_site"].operation_id == "editPolicyList_33"
+    assert (
+        old_idx.by_action_name["put_policy_site_list_builder_site"].operation_id
+        == "editPolicyList_33"
+    )
     assert (
         new_idx.by_action_name["put_policy_site_list_builder_site"].operation_id
         == "editPolicyList_ConfigurationPolicySiteListBuilder_3103"

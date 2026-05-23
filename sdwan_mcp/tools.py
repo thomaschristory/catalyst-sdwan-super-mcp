@@ -98,8 +98,7 @@ def _register_group_tool(
             return {
                 "error": True,
                 "message": (
-                    f"Unknown action '{action}' for tool '{_name}'. "
-                    f"Valid actions: {sorted(_valid)}"
+                    f"Unknown action '{action}' for tool '{_name}'. Valid actions: {sorted(_valid)}"
                 ),
             }
         return await _dispatcher.call(action, params or {})

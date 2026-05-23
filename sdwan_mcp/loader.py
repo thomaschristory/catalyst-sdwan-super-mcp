@@ -70,7 +70,7 @@ class ParameterSpec:
 @dataclass
 class OperationSpec:
     operation_id: str  # Cisco's operationId — kept as a back-reference for --diff
-    action_name: str   # stable, derived name used by the dispatcher and MCP tools
+    action_name: str  # stable, derived name used by the dispatcher and MCP tools
     summary: str
     method: str  # lowercase: get | post | put | delete | patch
     path: str
@@ -84,8 +84,10 @@ class OperationSpec:
 class ToolGroup:
     """A bucket of operations exposed as one MCP tool."""
 
-    name: str           # snake_case tool name
-    display_tag: str    # human-readable header, e.g. "Configuration / Feature Profile (NFVirtual) / networks"
+    name: str  # snake_case tool name
+    display_tag: (
+        str  # human-readable header, e.g. "Configuration / Feature Profile (NFVirtual) / networks"
+    )
     operations: list[OperationSpec] = field(default_factory=list)
 
     # Back-compat shim — older callers used `slug` and `tag`.
@@ -111,17 +113,19 @@ class SpecIndex:
 # Slug / segment helpers
 # ---------------------------------------------------------------------------
 
-_SLUG_REPLACE = str.maketrans({
-    " ": "_",
-    "-": "_",
-    "/": "_",
-    ".": "_",
-    "(": "",
-    ")": "",
-    ",": "",
-    "[": "",
-    "]": "",
-})
+_SLUG_REPLACE = str.maketrans(
+    {
+        " ": "_",
+        "-": "_",
+        "/": "_",
+        ".": "_",
+        "(": "",
+        ")": "",
+        ",": "",
+        "[": "",
+        "]": "",
+    }
+)
 
 
 def _slugify(text: str) -> str:
@@ -139,7 +143,7 @@ def _path_segments(path: str) -> list[str]:
     """Split a URL path into segments, stripping a leading /dataservice if present."""
     p = path
     if p.startswith(_DATASERVICE_PREFIX):
-        p = p[len(_DATASERVICE_PREFIX):]
+        p = p[len(_DATASERVICE_PREFIX) :]
     return [s for s in p.split("/") if s]
 
 
@@ -318,9 +322,7 @@ def _common_prefix_segments(keys: list[str]) -> int:
     return shortest
 
 
-def _bucket_by_depth(
-    ops: list[OperationSpec], depth: int
-) -> dict[str, list[OperationSpec]]:
+def _bucket_by_depth(ops: list[OperationSpec], depth: int) -> dict[str, list[OperationSpec]]:
     """
     Bucket ops by their first `depth` structural (non-templated) path segments.
 
@@ -363,9 +365,7 @@ def _split_by_path(
             final_buckets = deeper
             chosen_depth = depth
 
-    parent_slug = (
-        f"{section_slug}_{subtag_slug}" if subtag_slug != section_slug else section_slug
-    )
+    parent_slug = f"{section_slug}_{subtag_slug}" if subtag_slug != section_slug else section_slug
     parent_display = f"{section} / {subtag}" if subtag != section else section
 
     # Single-bucket case: every op shares the same structural path through
@@ -522,14 +522,9 @@ class SpecLoader:
                 continue
 
             merged["paths"].update(spec.get("paths", {}))
-            merged["components"]["schemas"].update(
-                spec.get("components", {}).get("schemas", {})
-            )
+            merged["components"]["schemas"].update(spec.get("components", {}).get("schemas", {}))
 
-        print(
-            f"[loader] Loaded {len(spec_files)} spec file(s), "
-            f"{len(merged['paths'])} total paths"
-        )
+        print(f"[loader] Loaded {len(spec_files)} spec file(s), {len(merged['paths'])} total paths")
         return merged
 
     # ------------------------------------------------------------------
@@ -603,8 +598,7 @@ class SpecLoader:
                 index.by_operation_id.setdefault(op.operation_id, op)
 
         print(
-            f"[loader] Index built: {len(index.by_action_name)} actions "
-            f"across {len(groups)} tools"
+            f"[loader] Index built: {len(index.by_action_name)} actions across {len(groups)} tools"
         )
         return index
 
