@@ -37,7 +37,7 @@ The shipped `config.yaml` points at `sandbox-sdwan-2.cisco.com` and ships specs 
 
 ## What you get
 
-- **One tool per Cisco section** (default) — ~36 tools, LLM-friendly. Optional `tag` granularity yields ~300 finer-grained tools.
+- **One tool per Cisco section** (default) — ~65 tools, LLM-friendly. Optional `tag` granularity yields ~375 finer-grained tools.
 - **Read-only by default.** `--read-write` registers POST/PUT/DELETE/PATCH explicitly.
 - **Two auth modes:** JWT (vManage 20.18.1+) and JSESSIONID + XSRF (older).
 - **Three transports:** stdio, SSE, streamable-HTTP.
