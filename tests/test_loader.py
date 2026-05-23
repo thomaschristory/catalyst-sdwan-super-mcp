@@ -213,8 +213,43 @@ def test_oversize_at_max_depth_emits_warning(tmp_path: Path, capsys) -> None:
 
     out = capsys.readouterr().out
     assert "WARNING" in out and "70 actions" in out
-    # The oversized tool is still emitted.
-    assert any(len(g.operations) == 70 for g in index.groups)
+
+    # Exactly one tool comes out, and it's named after the parent sub-tag —
+    # not the last-path-segment fallback. The path-split couldn't subdivide
+    # further so we don't pretend it did.
+    assert len(index.groups) == 1
+    assert index.groups[0].name == "configuration_feature_profile_sdwan"
+    assert len(index.groups[0].operations) == 70
+
+
+def test_misc_collapse_boundary_at_three_vs_four_ops(tmp_path: Path) -> None:
+    """
+    Sub-tag with exactly 3 ops collapses to <section>_misc;
+    sub-tag with exactly 4 ops gets its own tool.
+    """
+    big = _ops_for_subtag(
+        "Configuration", "Big", "/big", ["a"], count_per_leaf=51
+    )
+    three = _ops_for_subtag(
+        "Configuration", "Three", "/three", ["x"], count_per_leaf=3
+    )
+    four = _ops_for_subtag(
+        "Configuration", "Four", "/four", ["x"], count_per_leaf=4
+    )
+    specs_root = _make_spec(tmp_path, "20.99", big + three + four)
+
+    index = SpecLoader(
+        str(specs_root), "20.99", read_write=True, max_actions_per_tool=50
+    ).load()
+
+    names = {g.name: g for g in index.groups}
+    # 3-op sub-tag is below MISC_BUCKET_THRESHOLD=4 -> goes to misc.
+    assert "configuration_three" not in names
+    assert "configuration_misc" in names
+    assert len(names["configuration_misc"].operations) == 3
+    # 4-op sub-tag is at the threshold -> gets its own tool.
+    assert "configuration_four" in names
+    assert len(names["configuration_four"].operations) == 4
 
 
 def test_small_sibling_subtags_collapse_to_misc(tmp_path: Path) -> None:

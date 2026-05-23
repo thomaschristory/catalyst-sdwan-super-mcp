@@ -364,6 +364,21 @@ def _split_by_path(
     parent_slug = (
         f"{section_slug}_{subtag_slug}" if subtag_slug != section_slug else section_slug
     )
+    parent_display = f"{section} / {subtag}" if subtag != section else section
+
+    # Single-bucket case: every op shares the same structural path through
+    # PATH_SPLIT_MAX_DEPTH, so there's nothing to discriminate on. Emit one
+    # tool named after the parent sub-tag — same shape as the under-threshold
+    # sub-tag step in _split_section — and warn if it's still oversized.
+    if len(final_buckets) == 1:
+        only_ops = next(iter(final_buckets.values()))
+        if len(only_ops) > threshold:
+            print(
+                f"[loader] WARNING: tool '{parent_slug}' has {len(only_ops)} actions "
+                f"(threshold={threshold}) — hit PATH_SPLIT_MAX_DEPTH={PATH_SPLIT_MAX_DEPTH} "
+                f"at depth {chosen_depth} without further splitting."
+            )
+        return [ToolGroup(name=parent_slug, display_tag=parent_display, operations=only_ops)]
 
     # Strip the segments shared by every bucket — those are the sub-tag's
     # common prefix and would just repeat parent_slug. What's left is the
