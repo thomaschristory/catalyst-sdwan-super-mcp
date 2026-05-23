@@ -32,7 +32,7 @@ class VManageConfig:
 class SDWANConfig:
     specs_dir: str = "./specs"
     active_version: str = "20.18"
-    tag_granularity: str = "section"  # "section" (~30-40 tools) or "tag" (300+ tools)
+    max_actions_per_tool: int = 50  # 0 disables splitting (one tool per section)
 
 
 @dataclass
@@ -109,7 +109,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
     sdwan = SDWANConfig(
         specs_dir=sdwan_raw.get("specs_dir", "./specs"),
         active_version=str(sdwan_raw.get("active_version", "20.18")),
-        tag_granularity=str(sdwan_raw.get("tag_granularity", "section")),
+        max_actions_per_tool=int(sdwan_raw.get("max_actions_per_tool", 50)),
     )
 
     transport = TransportConfig(

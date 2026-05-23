@@ -83,12 +83,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Compare two spec versions and exit. Example: --diff 20.15 20.18",
     )
     parser.add_argument(
-        "--granularity",
-        choices=["section", "tag"],
+        "--max-actions-per-tool",
+        type=int,
         default=None,
+        metavar="N",
         help=(
-            "Tool grouping granularity: 'section' (~30-40 tools, default) "
-            "or 'tag' (300+ tools). Overrides config.yaml."
+            "Adaptive splitter cap: any tool with more than N actions is split further. "
+            "0 disables splitting (one tool per section). Overrides config.yaml (default 50)."
         ),
     )
     return parser.parse_args(argv)
@@ -132,13 +133,17 @@ async def _connect_and_register(
         print(f"[server] Listening on : {host}:{port}")
     print()
 
-    granularity = args.granularity or config.sdwan.tag_granularity
+    max_actions = (
+        args.max_actions_per_tool
+        if args.max_actions_per_tool is not None
+        else config.sdwan.max_actions_per_tool
+    )
 
     loader = SpecLoader(
         specs_dir=config.sdwan.specs_dir,
         version=version,
         read_write=read_write,
-        granularity=granularity,
+        max_actions_per_tool=max_actions,
     )
     index = loader.load()
 
