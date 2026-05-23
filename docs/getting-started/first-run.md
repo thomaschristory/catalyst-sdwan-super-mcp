@@ -12,16 +12,16 @@ You should see something like:
 
 ```
 [server] SD-WAN Super MCP
-[server] Spec version : 20.10
+[server] Spec version : 20.18
 [server] Mode         : READ-ONLY
 [server] Transport    : stdio
-[server] Auth         : Session
-[loader] Loading vmanageapi_2010.json
-[loader] Loaded 1 spec file(s), 2230 total paths
-[loader] Granularity=section -> 38 tool group(s)
-[loader] Mode=RO: kept 1718 operations, filtered out 1265 write operations
-[auth] Session login successful
-[server] 36 tools registered — starting stdio transport
+[server] Auth         : JWT
+[loader] Loading vmanageapi_2018.yaml
+[loader] Loaded 1 spec file(s), 2802 total paths
+[loader] Granularity=section -> 66 tool group(s)
+[loader] Mode=RO: kept 2227 operations, filtered out 1875 write operations
+[auth] JWT login successful
+[server] 62 tools registered — starting stdio transport
 ```
 
 ## Run as SSE (network-accessible)
@@ -43,7 +43,7 @@ uv run sdwan-mcp --read-write
 ## Diff two spec versions
 
 ```bash
-uv run sdwan-mcp --diff 20.10 20.18
+uv run sdwan-mcp --diff 20.15 20.18
 ```
 
 Outputs added/removed operations and parameter drift.

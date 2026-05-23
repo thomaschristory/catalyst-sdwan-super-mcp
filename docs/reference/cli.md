@@ -38,7 +38,7 @@ sdwan-mcp --read-write --transport sse --host 0.0.0.0 --port 8000
 sdwan-mcp --version 20.18
 
 # Diff before upgrade
-sdwan-mcp --diff 20.10 20.18
+sdwan-mcp --diff 20.15 20.18
 
 # Crank tools up to 11
 sdwan-mcp --granularity tag

@@ -97,7 +97,7 @@ Subsequent requests:
 
 Token is refreshed proactively when within 2 minutes of expiry.
 
-### Session-based (legacy fallback for older vManage, e.g. 20.10)
+### Session-based (legacy fallback for deployments without the JWT endpoint)
 
 ```
 POST /j_security_check  { j_username, j_password }
