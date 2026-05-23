@@ -85,6 +85,7 @@ ignore = [
 python_version = "3.11"
 ignore_missing_imports = true
 warn_unused_ignores = true
+strict = true
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"

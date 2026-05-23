@@ -2,10 +2,13 @@
 config.py — loads config.yaml and resolves ${ENV_VAR} interpolation.
 """
 
+from __future__ import annotations
+
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -59,7 +62,7 @@ _ENV_RE = re.compile(r"\$\{([^}]+)\}")
 def _interpolate(value: str) -> str:
     """Replace ${VAR} with the corresponding environment variable."""
 
-    def replacer(match: re.Match) -> str:
+    def replacer(match: re.Match[str]) -> str:
         var_name = match.group(1)
         result = os.environ.get(var_name, "")
         if not result:
@@ -69,7 +72,7 @@ def _interpolate(value: str) -> str:
     return _ENV_RE.sub(replacer, value)
 
 
-def _interpolate_dict(obj):
+def _interpolate_dict(obj: Any) -> Any:
     """Recursively interpolate env vars in all string values of a dict."""
     if isinstance(obj, dict):
         return {k: _interpolate_dict(v) for k, v in obj.items()}
