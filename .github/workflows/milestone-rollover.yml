@@ -1,0 +1,63 @@
+name: Milestone rollover
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  issues: write
+
+jobs:
+  rollover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close current milestone, open next patch, move open issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          # Strict allowlist: vMAJOR.MINOR.PATCH (digits only).
+          # Refuse anything else so the tag can't smuggle shell or jq metachars.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$TAG' is not vMAJOR.MINOR.PATCH — skipping"
+            exit 0
+          fi
+
+          version="${TAG#v}"
+          IFS='.' read -r major minor patch <<<"$version"
+          next_tag="v${major}.${minor}.$((patch + 1))"
+          echo "Released: $TAG  →  Next milestone: $next_tag"
+
+          # Snapshot open milestones once; query it with jq --arg for safety.
+          milestones_json=$(gh api "repos/$REPO/milestones?state=open" --paginate)
+          current_number=$(jq -r --arg t "$TAG" \
+            '.[] | select(.title == $t) | .number' <<<"$milestones_json" | head -n1)
+          next_number=$(jq -r --arg t "$next_tag" \
+            '.[] | select(.title == $t) | .number' <<<"$milestones_json" | head -n1)
+          if [[ -z "$next_number" ]]; then
+            next_number=$(gh api -X POST "repos/$REPO/milestones" \
+              -f "title=$next_tag" --jq '.number')
+            echo "Created milestone $next_tag (#$next_number)"
+          else
+            echo "Milestone $next_tag already exists (#$next_number)"
+          fi
+
+          # Move open issues from current → next, then close current.
+          if [[ -n "$current_number" ]]; then
+            mapfile -t open_issues < <(gh api --paginate \
+              "repos/$REPO/issues?state=open&milestone=$current_number" \
+              --jq '.[] | select(.pull_request == null) | .number')
+            for n in "${open_issues[@]}"; do
+              gh api -X PATCH "repos/$REPO/issues/$n" \
+                -F "milestone=$next_number" >/dev/null
+              echo "Moved issue #$n to $next_tag"
+            done
+            gh api -X PATCH "repos/$REPO/milestones/$current_number" \
+              -f state=closed >/dev/null
+            echo "Closed milestone $TAG (#$current_number)"
+          else
+            echo "No open milestone matching $TAG — nothing to close/move"
+          fi
