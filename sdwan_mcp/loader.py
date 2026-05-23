@@ -351,10 +351,12 @@ def _split_by_path(
     """
     final_buckets = _bucket_by_depth(ops, PATH_SPLIT_START_DEPTH)
     chosen_depth = PATH_SPLIT_START_DEPTH
+    last_tried_depth = PATH_SPLIT_START_DEPTH
 
     for depth in range(PATH_SPLIT_START_DEPTH + 1, PATH_SPLIT_MAX_DEPTH + 1):
         if all(len(b) <= threshold for b in final_buckets.values()):
             break
+        last_tried_depth = depth
         deeper = _bucket_by_depth(ops, depth)
         # Only adopt a deeper grouping if it actually subdivides further.
         if len(deeper) > len(final_buckets):
@@ -375,8 +377,9 @@ def _split_by_path(
         if len(only_ops) > threshold:
             print(
                 f"[loader] WARNING: tool '{parent_slug}' has {len(only_ops)} actions "
-                f"(threshold={threshold}) — hit PATH_SPLIT_MAX_DEPTH={PATH_SPLIT_MAX_DEPTH} "
-                f"at depth {chosen_depth} without further splitting."
+                f"(threshold={threshold}) — path splitting tried depths "
+                f"{PATH_SPLIT_START_DEPTH}-{last_tried_depth} (max {PATH_SPLIT_MAX_DEPTH}) "
+                f"and could not subdivide further."
             )
         return [ToolGroup(name=parent_slug, display_tag=parent_display, operations=only_ops)]
 
