@@ -16,7 +16,7 @@ vmanage:
 sdwan:
   specs_dir: ./specs                # default: ./specs
   active_version: "20.18"           # required — must match a folder in specs_dir (20.15, 20.16, 20.18 bundled)
-  tag_granularity: section          # default: "section". Options: "section" | "tag"
+  max_actions_per_tool: 150         # default: 150. Cap before splitting; 0 disables splitting. See guides/tool-splitting.md
 
 transport:
   mode: stdio                       # default: stdio. Options: stdio | sse | streamable-http

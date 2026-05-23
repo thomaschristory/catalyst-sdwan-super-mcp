@@ -9,7 +9,7 @@ Tools are generated dynamically from the official OpenAPI specs — drop in a ne
 ## At a glance
 
 - **Dynamic** — no codegen step, no per-version Python file.
-- **One tool per Cisco section** (default) — ~65 tools, LLM-friendly. Optional `tag` granularity gives ~375 tools for fine-grained control.
+- **Adaptive tool splitting** — a size cap (`max_actions_per_tool`, default 150) drives section / sub-tag / URL-path recursion so every tool stays under budget. 360 tools on 20.18 RW out of the box. [How it works](guides/tool-splitting.md).
 - **Read-only by default** — explicit `--read-write` flag for POST/PUT/DELETE/PATCH.
 - **Two auth modes** — modern JWT (vManage 20.18.1+) and legacy session (older).
 - **Three transports** — stdio (Claude Desktop), SSE, streamable-HTTP.

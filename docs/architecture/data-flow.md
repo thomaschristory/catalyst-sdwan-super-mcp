@@ -5,8 +5,9 @@
 ```
 1. server.py reads CLI flags + config.yaml + .env
 2. SpecLoader loads specs/{version}/*.{yaml,yml,json}, merges,
-   groups by tag (or section), drops mutations if RO,
-   builds operationId index
+   drops mutations if RO, adaptively splits ops into ToolGroups
+   (section -> sub-tag -> URL path, see guides/tool-splitting.md),
+   derives a stable action_name per op, builds an action_name index
 3. VManageAuth.login() — JWT or session
 4. Dispatcher attaches the index and a single httpx.AsyncClient
 5. tools.register_tools(...) registers one MCP tool per group
@@ -17,11 +18,12 @@
 
 ```
 LLM picks tool name, e.g. "monitoring"
-LLM emits      { "action": "listAllDevices", "params": { "site-id": "500" } }
+LLM emits      { "action": "get_device", "params": { "site-id": "500" } }
 
   ↓ FastMCP routes to the group's handler
-  ↓ handler validates action ∈ valid operationIds
-  ↓ dispatcher.call(operationId, params)
+  ↓ handler validates action ∈ derived action_names for this group
+  ↓ dispatcher.call(action_name, params)
+  ↓ dispatcher looks op up via SpecIndex.by_action_name[action_name]
 
 dispatcher:
   ↓ ensure_fresh()           # JWT refresh if needed

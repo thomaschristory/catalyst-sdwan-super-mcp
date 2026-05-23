@@ -18,10 +18,10 @@ You should see something like:
 [server] Auth         : JWT
 [loader] Loading vmanageapi_2018.yaml
 [loader] Loaded 1 spec file(s), 2802 total paths
-[loader] Granularity=section -> 66 tool group(s)
-[loader] Mode=RO: kept 2227 operations, filtered out 1875 write operations
+[loader] Mode=RO, max_actions_per_tool=150 -> 229 tool(s), 2227 operations
+[loader] Index built: 2116 actions across 229 tools
 [auth] JWT login successful
-[server] 62 tools registered — starting stdio transport
+[server] 229 tools registered — starting stdio transport
 ```
 
 ## Run as SSE (network-accessible)
