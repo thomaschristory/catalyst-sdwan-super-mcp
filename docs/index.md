@@ -19,7 +19,7 @@ Tools are generated dynamically from the official OpenAPI specs — drop in a ne
 
 ## What's the “super” for?
 
-The same pattern as [`netbox-super-cli`](https://github.com/thomaschristory/netbox-super-cli): instead of hand-writing a tool per endpoint (the API has 2,000+), we **derive everything from the upstream spec**. Cisco evolves vManage; you drop the new spec in `specs/{version}/` and the MCP tools rebuild themselves.
+Instead of hand-writing a tool per endpoint (the API has 2,000+), we **derive everything from the upstream spec**. Cisco evolves vManage; you drop the new spec in `specs/{version}/` and the MCP tools rebuild themselves.
 
 ---
 

@@ -4,8 +4,8 @@
 
 A FastMCP server that exposes the Cisco Catalyst SD-WAN Manager (vManage) REST API
 as MCP tools, with dynamic spec loading so it stays in sync as the API evolves
-across versions. Same pattern as `netbox-super-cli`: no codegen — derive everything
-from the upstream OpenAPI spec.
+across versions. No codegen — everything is derived from the upstream OpenAPI
+spec.
 
 Public repo: <https://github.com/thomaschristory/catalyst-sdwan-super-mcp>.
 Docs: <https://thomaschristory.github.io/catalyst-sdwan-super-mcp/>.
@@ -366,7 +366,7 @@ CHANGED (parameter drift):
 |---|---|---|
 | Language | Python ≥ 3.11 | Simpler local iteration, no build step |
 | MCP framework | fastmcp | Minimal boilerplate |
-| Packaging | hatchling + uv | Matches netbox-super-cli |
+| Packaging | hatchling + uv | Modern Python packaging, fast dependency resolution |
 | Tool splitting | Size-driven adaptive splitter (`max_actions_per_tool`, default 150). Section → sub-tag → URL path (depth 3–5). | The earlier `section`/`tag` toggle was too coarse: `section` lumped 1,500+ ops into one tool on `Configuration`; `tag` produced 375 micro-tools on 20.18. A single size cap with recursive fallback adapts cleanly to the spec's actual shape without a mode switch. (#13) |
 | Action names | Derived from `(method, path, tag)`, not Cisco's `operationId`. | Cisco renamed ~31 % of legacy operationIds in place between 20.16 and 20.18 (`editPolicyList_33` → `editPolicyList_ConfigurationPolicySiteListBuilder_3103`). Same URL, same behaviour, different identifier. Our user-facing action name stays stable across that rename. operationId remains on `OperationSpec` as a back-reference for `--diff`. (#13) |
 | Supported versions | 20.15+ only | Pre-20.15 specs use numeric-suffix operationIds that churn between minor releases; not worth the special-case shims (#13). |
