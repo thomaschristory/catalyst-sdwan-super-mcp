@@ -45,28 +45,37 @@ Upgrading to a new vManage version = drop a new spec folder + change one config 
 issue [#13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13)
 for the analysis. The repo ships 20.15, 20.16, and 20.18 specs; 20.18 is the default.
 
-### Two grouping granularities
+### Adaptive tool splitting
 
-Cisco's OpenAPI tags look like `Monitoring - Device Details` and
-`Configuration - Feature Profile (SDWAN)`. We support two grouping modes:
+Cisco's spec has thousands of operations. A single tool per section would push
+the description payload past most clients' per-tool budgets. The loader splits
+adaptively based on a size cap:
 
-- **`section`** (default) — group by the first word, e.g. `Configuration`.
-  On vManage 20.18 this collapses to ~65 tools.
-- **`tag`** — group by the full tag, yielding ~375 tools on 20.18. Use when your
-  client can ingest hundreds of tools and you want narrower per-tool descriptions.
+- `sdwan.max_actions_per_tool: 150` (default; `0` disables splitting).
+- Algorithm: **section → if over cap, split by sub-tag → if a sub-tag is still
+  over cap, recurse on URL path segments at depth 3, 4, 5**.
+- Sibling sub-tags with `<4` operations collapse into a single `<parent>_misc`
+  tool to avoid a long tail of tiny tools.
+- Buckets still over the cap at depth 5 (or oversized `_misc` umbrellas) emit a
+  WARNING but are still registered.
 
-Configurable via `sdwan.tag_granularity` in `config.yaml` or `--granularity` on the CLI.
-(This dual-mode logic is being replaced by an adaptive splitter — see issue #13.)
+On 20.18 RW with default settings: 360 tools, max tool ~110 ops, 0 warnings.
+Full algorithm, worked example, and tool-count tables live in
+[docs/guides/tool-splitting.md](docs/guides/tool-splitting.md).
 
 ### Tool shape
 
 ```
-tool name:    group slug  (e.g. monitoring, configuration_device_actions)
+tool name:    group slug  (e.g. monitoring, configuration_feature_profile_sdwan_transport)
 description:  lists all actions with their params, built from the spec
 args:
-  action:     str — one of the operationIds in this group
+  action:     str — a derived stable name like get_device_status; NOT Cisco's operationId
   params:     dict — keys/values vary by action, documented in description
 ```
+
+Action names come from `(HTTP method, URL path, OpenAPI tag)`, deduped within a
+tool. Cisco's `operationId` is preserved on `OperationSpec` as a back-reference
+for the `--diff` utility but never reaches the user.
 
 ### Read-only by default
 
@@ -131,7 +140,7 @@ catalyst-sdwan-super-mcp/
     server.py                 entrypoint, CLI, async pre-flight
     config.py                 config.yaml loader + ${ENV} interpolation
     auth.py                   JWT + session login, refresh, logout
-    loader.py                 spec loading, tag grouping, RO/RW filter, indexing
+    loader.py                 spec loading, adaptive splitting (section/sub-tag/path), RO/RW filter, action-name derivation, indexing
     dispatcher.py             httpx client, param routing, retry on session expiry
     tools.py                  dynamic MCP tool registration
     diff.py                   version diff utility
@@ -140,7 +149,7 @@ catalyst-sdwan-super-mcp/
   docs/                       mkdocs-material site
     index.md
     getting-started/{install,first-run,sandbox}.md
-    guides/{mcp-clients,read-write,granularity,spec-versions,docker}.md
+    guides/{mcp-clients,read-write,tool-splitting,spec-versions,docker}.md
     reference/{cli,configuration,authentication}.md
     architecture/{overview,data-flow}.md
     contributing/{development,release-process}.md
@@ -185,7 +194,7 @@ vmanage:
 sdwan:
   specs_dir: ./specs
   active_version: "20.18"
-  tag_granularity: section          # "section" (~30-65 tools) or "tag" (300+)
+  max_actions_per_tool: 150         # default; 0 disables splitting (see docs/guides/tool-splitting.md)
 
 transport:
   mode: stdio                       # stdio | sse | streamable-http
@@ -203,7 +212,7 @@ sdwan-mcp --transport sse --port 8000              # SSE transport
 sdwan-mcp --transport streamable-http              # streamable HTTP
 sdwan-mcp --read-write                             # enable mutations
 sdwan-mcp --version 20.15                          # override spec version
-sdwan-mcp --granularity tag                        # override granularity
+sdwan-mcp --max-actions-per-tool 50                # smaller, more numerous tools
 sdwan-mcp --diff 20.15 20.18                       # diff two versions and exit
 sdwan-mcp --config /path/to/config.yaml            # custom config file
 ```
@@ -250,9 +259,11 @@ server.py (async pre-flight)
   → config.py     reads config.yaml, interpolates env vars
   → loader.py     loads all *.{yaml,yml,json} from specs/{version}/
                   merges paths + schemas
-                  groups operations by tag or section
                   filters by RO/RW flag
-                  builds flat operationId index
+                  adaptively splits ops into ToolGroups
+                    (section → sub-tag → URL path; see tool-splitting.md)
+                  derives a stable action_name per op
+                  builds flat action_name → op index (plus operation_id index for --diff)
   → auth.py       VManageAuth initialised with credentials
   → dispatcher.py httpx.AsyncClient created
   → dispatcher.connect()  → auth.login() → JWT or session flow
@@ -264,10 +275,10 @@ server.py (async pre-flight)
 
 ```
 LLM calls tool "monitoring"
-  → tools.py       receives { action: "getDeviceCounters", params: {} }
-                   validates action against known operationIds
-  → dispatcher.call("getDeviceCounters", {})
-  → dispatcher     looks up op in spec index
+  → tools.py       receives { action: "get_device_counters", params: {} }
+                   validates action against the group's derived action_names
+  → dispatcher.call("get_device_counters", {})
+  → dispatcher     looks up op via SpecIndex.by_action_name
                    resolves path template, splits query/body params
                    fires httpx request with auth headers
                    on 302/welcome.html or 401: re-auths, retries once
@@ -287,12 +298,19 @@ finally block in server.py
 
 ## Loader logic (loader.py)
 
-1. `_load_and_merge()` — glob `specs/{version}/*.{yaml,yml,json}`, merge into one dict
-2. `_group_by_tag()` — iterate paths/methods, group by tag or section
-3. `_filter_by_mode()` — drop non-GET if RO mode
-4. `_build_index()` — flat dict keyed by operationId for O(1) dispatch lookup
+1. `_load_and_merge()` — glob `specs/{version}/*.{yaml,yml,json}`, merge into one dict.
+2. `_extract_operations()` — flatten paths/methods into `OperationSpec`s; each gets a
+   stable `action_name` derived from `(method, path, tag)` via `_derive_action_name()`.
+3. `_split_into_groups()` — RO/RW filter, then bucket ops by section. For each section,
+   `_split_section()` decides whether to keep it as one tool or split by sub-tag.
+   Over-cap sub-tags fall through to `_split_by_path()`, which recurses on URL path
+   segments at depth 3, 4, 5. Sibling buckets with `<4` ops collapse to `<parent>_misc`.
+4. `_dedupe_tool_names()` and `_dedupe_action_names()` ensure uniqueness within and
+   across tools (appending `_2`, `_3`, … on collision).
+5. `_build_index()` — two flat dicts: `by_action_name` (used by the dispatcher) and
+   `by_operation_id` (used only by `--diff`).
 
-RO filter:
+RO/RW filter:
 
 ```python
 RO_METHODS = {"get"}
@@ -302,6 +320,9 @@ RW_METHODS = {"get", "post", "put", "delete", "patch"}
 ---
 
 ## Dispatcher logic (dispatcher.py)
+
+Lookup: `SpecIndex.by_action_name[action_name]` → `OperationSpec`. Cisco's
+`operation_id` is not used here — it's only kept around for `--diff`.
 
 Path param injection:
 
@@ -346,7 +367,8 @@ CHANGED (parameter drift):
 | Language | Python ≥ 3.11 | Simpler local iteration, no build step |
 | MCP framework | fastmcp | Minimal boilerplate |
 | Packaging | hatchling + uv | Matches netbox-super-cli |
-| Tool grouping | One per **section** by default | 20.18 has 375 tags — too many. Section yields ~65 tools. `tag` mode still available pending the adaptive splitter (#13). |
+| Tool splitting | Size-driven adaptive splitter (`max_actions_per_tool`, default 150). Section → sub-tag → URL path (depth 3–5). | The earlier `section`/`tag` toggle was too coarse: `section` lumped 1,500+ ops into one tool on `Configuration`; `tag` produced 375 micro-tools on 20.18. A single size cap with recursive fallback adapts cleanly to the spec's actual shape without a mode switch. (#13) |
+| Action names | Derived from `(method, path, tag)`, not Cisco's `operationId`. | Cisco renamed ~31 % of legacy operationIds in place between 20.16 and 20.18 (`editPolicyList_33` → `editPolicyList_ConfigurationPolicySiteListBuilder_3103`). Same URL, same behaviour, different identifier. Our user-facing action name stays stable across that rename. operationId remains on `OperationSpec` as a back-reference for `--diff`. (#13) |
 | Supported versions | 20.15+ only | Pre-20.15 specs use numeric-suffix operationIds that churn between minor releases; not worth the special-case shims (#13). |
 | Params shape | `(action: str, params: dict)` | Scales with tag size; description documents per-action params |
 | RO/RW | Flag at runtime | Safe default, explicit opt-in for mutations |
@@ -368,5 +390,4 @@ Tracked as GitHub issues — see <https://github.com/thomaschristory/catalyst-sd
 - Auth middleware for HTTP transports (protect exposed SSE/streamable-http endpoints)
 - Response pagination handling for bulk endpoints
 - Retry / timeout config on httpx client
-- Per-action subtools (split very large groups like `configuration` into multiple tools)
 - Live integration test workflow against the DevNet sandbox

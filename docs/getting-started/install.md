@@ -39,8 +39,8 @@ vmanage:
 
 sdwan:
   specs_dir: ./specs
-  active_version: "20.18"     # must match a folder in specs/
-  tag_granularity: section    # "section" or "tag"
+  active_version: "20.18"        # must match a folder in specs/
+  max_actions_per_tool: 150      # default; 0 disables splitting (see guides/tool-splitting.md)
 ```
 
 ## Get the OpenAPI specs
