@@ -79,6 +79,7 @@ class OperationSpec:
     parameters: list[ParameterSpec] = field(default_factory=list)
     has_body: bool = False
     body_description: str = ""
+    pagination: str | None = None  # "scroll" | "offset" | None
 
 
 @dataclass
@@ -230,6 +231,25 @@ def _parse_parameters(raw_params: list[dict[str, Any]]) -> list[ParameterSpec]:
     return result
 
 
+_OFFSET_SIZE_PARAMS = {"pageSize", "count", "limit"}
+
+
+def _detect_pagination_style(parameters: list[ParameterSpec]) -> str | None:
+    """
+    Decide pagination style from a parsed parameter list.
+
+    - "scroll" if any param is named scrollId
+    - "offset" if both `page` and one of pageSize/count/limit are present
+    - None otherwise
+    """
+    names = {p.name for p in parameters if p.location == "query"}
+    if "scrollId" in names:
+        return "scroll"
+    if "page" in names and (names & _OFFSET_SIZE_PARAMS):
+        return "offset"
+    return None
+
+
 def _parse_operation(
     path: str,
     method: str,
@@ -242,6 +262,7 @@ def _parse_operation(
         body_desc = operation["requestBody"].get("description", "Request body (JSON)")
 
     op_id = operation.get("operationId", f"{method}_{path}")
+    parameters = _parse_parameters(operation.get("parameters", []))
     return OperationSpec(
         operation_id=op_id,
         action_name=_derive_action_name(method, path, tag),
@@ -249,9 +270,10 @@ def _parse_operation(
         method=method,
         path=path,
         tag=tag,
-        parameters=_parse_parameters(operation.get("parameters", [])),
+        parameters=parameters,
         has_body=has_body,
         body_description=body_desc,
+        pagination=_detect_pagination_style(parameters),
     )
 
 
