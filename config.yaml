@@ -25,6 +25,14 @@ sdwan:
     page_size: null
 
 transport:
-  mode: stdio             # stdio | sse | streamable-http
+  mode: stdio                       # stdio | sse | streamable-http
   host: 127.0.0.1
   port: 8000
+  # HTTP transports (sse, streamable-http) only:
+  #   type: none    → no auth. Auto-demoted to 127.0.0.1 if host is non-loopback,
+  #                   unless you also pass --insecure-allow-public.
+  #   type: bearer  → require `Authorization: Bearer <token>` on every request.
+  #                   token must be non-empty (use ${ENV_VAR} interpolation).
+  auth:
+    type: none
+    # token: "${SDWAN_MCP_TOKEN}"

@@ -109,3 +109,125 @@ def test_pagination_overrides(tmp_path):
     assert cfg.sdwan.pagination.enabled is False
     assert cfg.sdwan.pagination.max_pages == 12
     assert cfg.sdwan.pagination.page_size == 200
+
+
+def test_transport_auth_defaults_to_none(tmp_path: Path) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n")
+    config = load_config(str(cfg))
+    assert config.transport.auth.type == "none"
+    assert config.transport.auth.token == ""
+
+
+def test_transport_auth_bearer_with_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDWAN_MCP_TOKEN", "s3cret-token-long-enough")
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        """\
+vmanage:
+  host: vm.test
+sdwan:
+  active_version: '20.18'
+transport:
+  mode: streamable-http
+  host: 0.0.0.0
+  port: 8000
+  auth:
+    type: bearer
+    token: "${SDWAN_MCP_TOKEN}"
+"""
+    )
+    config = load_config(str(cfg))
+    assert config.transport.auth.type == "bearer"
+    assert config.transport.auth.token == "s3cret-token-long-enough"
+
+
+def test_transport_auth_bearer_missing_token_raises(tmp_path: Path) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        """\
+vmanage:
+  host: vm.test
+sdwan:
+  active_version: '20.18'
+transport:
+  mode: streamable-http
+  auth:
+    type: bearer
+"""
+    )
+    with pytest.raises(ValueError, match=r"transport\.auth\.type=bearer requires"):
+        load_config(str(cfg))
+
+
+def test_transport_auth_none_with_token_raises(tmp_path: Path) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        """\
+vmanage:
+  host: vm.test
+sdwan:
+  active_version: '20.18'
+transport:
+  mode: streamable-http
+  auth:
+    type: none
+    token: leftover-paste
+"""
+    )
+    with pytest.raises(ValueError, match=r"token configured but transport\.auth\.type=none"):
+        load_config(str(cfg))
+
+
+def test_transport_auth_unknown_type_raises(tmp_path: Path) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        """\
+vmanage:
+  host: vm.test
+sdwan:
+  active_version: '20.18'
+transport:
+  auth:
+    type: oidc
+"""
+    )
+    with pytest.raises(ValueError, match=r"unknown transport\.auth\.type"):
+        load_config(str(cfg))
+
+
+def test_transport_auth_bearer_env_var_unset_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SDWAN_MCP_TOKEN", raising=False)
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        "vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n"
+        'transport:\n  auth:\n    type: bearer\n    token: "${SDWAN_MCP_TOKEN}"\n'
+    )
+    with pytest.raises(ValueError, match=r"transport\.auth\.type=bearer requires"):
+        load_config(str(cfg))
+
+
+def test_transport_auth_bearer_short_token_raises(tmp_path: Path) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        "vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n"
+        'transport:\n  auth:\n    type: bearer\n    token: "abc12"\n'
+    )
+    with pytest.raises(ValueError, match=r"transport\.auth\.token is too short"):
+        load_config(str(cfg))
+
+
+def test_transport_auth_bearer_soft_floor_warns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        "vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n"
+        'transport:\n  auth:\n    type: bearer\n    token: "tenchars-x"\n'
+    )
+    config = load_config(str(cfg))
+    assert config.transport.auth.token == "tenchars-x"
+    err = capsys.readouterr().err
+    assert "shorter than 16 chars" in err

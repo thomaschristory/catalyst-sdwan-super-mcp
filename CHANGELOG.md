@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- HTTP transport auth: `transport.auth.{type,token}` config block. `type: bearer`
+  requires `Authorization: Bearer <token>` on every request, compared in
+  constant time, with an RFC 6750 `WWW-Authenticate` challenge on 401.
+  Rejection logs are rate-limited (10 lines / 60s window) to resist log-flood
+  attacks. Tokens shorter than 8 chars are rejected at startup, under 16 chars
+  warn. (#7)
+- New CLI flag `--insecure-allow-public` to acknowledge binding a non-loopback
+  host without auth.
 - Configurable per-request timeout (`vmanage.timeout`, default 30s) and
   transient-failure retry policy (`vmanage.retries`) on the httpx client.
   Retries 502 / 503 / 504 and `httpx.RequestError` (timeouts, connection
@@ -17,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   endpoint families up to `sdwan.pagination.max_pages` (default 5), then
   surfaces a resumable cursor under `pagination.next_cursor`. Per-call
   overrides via `_max_pages`, `_page_size`, `_pagination` params. (#8)
+
+### Changed (behavior — read this if you upgrade)
+- `--host 0.0.0.0` (or any non-loopback bind) with `transport.auth.type=none`
+  is now auto-demoted to `127.0.0.1` with a loud stderr warning. To restore
+  the previous "open on the LAN" behavior, either:
+    - set `transport.auth.type: bearer` and provide a token (recommended), OR
+    - set `transport.auth.type: none` explicitly AND pass
+      `--insecure-allow-public` to acknowledge the risk.
+
+### Security
+- The HTTP transports (SSE, streamable-http) now have first-class authn (#7).
 
 ## [0.1.0] - 2026-05-23
 

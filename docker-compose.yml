@@ -3,6 +3,10 @@ services:
     build: .
     image: catalyst-sdwan-super-mcp:latest
     env_file: .env
+    environment:
+      - VMANAGE_USERNAME=${VMANAGE_USERNAME}
+      - VMANAGE_PASSWORD=${VMANAGE_PASSWORD}
+      - SDWAN_MCP_TOKEN=${SDWAN_MCP_TOKEN}
     volumes:
       - ./specs:/app/specs:ro
       - ./config.yaml:/app/config.yaml:ro

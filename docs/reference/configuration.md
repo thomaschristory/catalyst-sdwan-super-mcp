@@ -29,7 +29,56 @@ transport:
   mode: stdio                       # default: stdio. Options: stdio | sse | streamable-http
   host: 127.0.0.1                   # default. Bind address for HTTP transports.
   port: 8000                        # default. Bind port for HTTP transports.
+  auth:
+    type: none                      # default: none. Options: none | bearer
+    token: ""                       # required when type: bearer. Supports ${ENV_VAR}.
 ```
+
+## `transport.auth` — HTTP transport authentication
+
+Applies to the `sse` and `streamable-http` transports only. The `stdio`
+transport ignores this block.
+
+| Key     | Type   | Default | Description                                                  |
+|---------|--------|---------|--------------------------------------------------------------|
+| `type`  | string | `none`  | `none` (no auth) or `bearer` (shared bearer token).          |
+| `token` | string | `""`    | Required when `type: bearer`. Use `${ENV_VAR}` interpolation.|
+
+Validation (raised at config load):
+
+- `type: bearer` with an empty `token` → error.
+- `type: none` with a non-empty `token` → error (catches the common "I pasted
+  a token but forgot to flip the type" mistake).
+- Any other `type` value → error.
+
+### Bind-safety: auto-demotion to loopback
+
+If `transport.host` is non-loopback (e.g. `0.0.0.0`) **and**
+`transport.auth.type` is `none`, the server prints a stderr WARNING and
+demotes the bind to `127.0.0.1`. To bind outward without auth (only safe
+behind a trusted authenticating reverse proxy), pass `--insecure-allow-public`
+on the command line.
+
+### Example: bearer token via env var
+
+```yaml
+transport:
+  mode: streamable-http
+  host: 0.0.0.0
+  port: 8000
+  auth:
+    type: bearer
+    token: "${SDWAN_MCP_TOKEN}"
+```
+
+Then in `.env`:
+
+```
+SDWAN_MCP_TOKEN=replace-me-with-a-long-random-string
+```
+
+Clients must send `Authorization: Bearer replace-me-with-a-long-random-string`
+on every request.
 
 ## Environment variables
 
