@@ -88,6 +88,26 @@ def test_stitch_rejects_missing_method_or_path() -> None:
         )
 
 
+def test_stitch_keeps_first_schema_on_collision_and_reports() -> None:
+    """Two sections publish the same schema name → keep first, surface collision."""
+    a = _load("model_fragment_device.json")
+    b = _load("model_fragment_device.json")
+    b["spec"]["properties"]["hostname"]["type"] = "integer"  # mark it different
+    doc = stitch(
+        version="20.99",
+        op_fragments=[(_ref("v1/x/get.json"), _load("op_fragment_list.json"))],
+        model_fragments=[
+            (_ref("Device.json", "models"), a),
+            (_ref("Device.json", "models"), b),  # collision
+        ],
+    )
+    # First one wins
+    assert doc["components"]["schemas"]["Device"]["properties"]["hostname"]["type"] == "string"
+    # Collision is surfaced via the side-channel key
+    assert "x-sdwan-mcp-schema-collisions" in doc
+    assert doc["x-sdwan-mcp-schema-collisions"]["Device"] == 2
+
+
 def test_stitch_falls_back_to_default_servers_when_meta_missing() -> None:
     op = _load("op_fragment_list.json")
     op["meta"].pop("servers", None)

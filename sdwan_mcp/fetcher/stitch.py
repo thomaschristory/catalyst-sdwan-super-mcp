@@ -64,6 +64,7 @@ def stitch(
         if servers is None:
             servers = _extract_servers(body)
 
+    collisions: dict[str, int] = {}
     for ref, body in model_fragments:
         spec = body.get("spec")
         if not isinstance(spec, dict):
@@ -72,6 +73,12 @@ def stitch(
         # carry a 'title' inside spec that matches the filename; we trust the
         # filename because it is the value targeted by '#/components/schemas/X'
         # references inside operations.
+        if ref.name in schemas:
+            # Two sections published the same schema name. Keep the first one
+            # (deterministic, mirrors the path/method dedup policy). Track the
+            # collision count so the caller can surface it.
+            collisions[ref.name] = collisions.get(ref.name, 1) + 1
+            continue
         schemas[ref.name] = spec
 
     doc: JsonObj = {
@@ -98,6 +105,10 @@ def stitch(
         "paths": _sort_dict(paths),
         "components": {"schemas": _sort_dict(schemas)},
     }
+    if collisions:
+        # Surface to the caller without forcing a hard dependency on logging
+        # here. The fetcher inspects this key and emits a WARNING.
+        doc["x-sdwan-mcp-schema-collisions"] = dict(sorted(collisions.items()))
     return doc
 
 

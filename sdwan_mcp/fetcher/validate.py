@@ -85,13 +85,20 @@ def validate(
 
 
 def _collect_refs(node: Any) -> Iterable[str]:
-    """Yield every ``$ref`` string anywhere in the document."""
-    if isinstance(node, dict):
-        for k, v in node.items():
-            if k == "$ref" and isinstance(v, str):
-                yield v
-            else:
-                yield from _collect_refs(v)
-    elif isinstance(node, list):
-        for item in node:
-            yield from _collect_refs(item)
+    """Yield every ``$ref`` string anywhere in the document.
+
+    Iterative (BFS) rather than recursive — a real OpenAPI doc nests deep
+    enough through ``allOf`` chains that the default 1000-frame recursion
+    limit can fire on a pathological fragment.
+    """
+    stack: list[Any] = [node]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, dict):
+            for k, v in cur.items():
+                if k == "$ref" and isinstance(v, str):
+                    yield v
+                else:
+                    stack.append(v)
+        elif isinstance(cur, list):
+            stack.extend(cur)

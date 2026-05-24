@@ -11,6 +11,7 @@ See ``docs/dev/issue-31-plan.md`` for the design notes.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
+import yaml
 
 from .discover import (
     Discovery,
@@ -30,10 +32,10 @@ from .fetch import (
     DEFAULT_CACHE_ROOT,
     FetchError,
     FetchProgress,
+    _atomic_write_bytes,
     fetch_discovery_html,
     fetch_fragments,
     make_client,
-    write_yaml,
 )
 from .stitch import StitchError, stitch
 from .validate import FetcherValidationError, validate
@@ -161,9 +163,21 @@ async def fetch_version(
     _log(log, "[fetch] stitching fragments")
     doc = stitch(version=version, op_fragments=op_pairs, model_fragments=model_pairs)
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    n_bytes = write_yaml(doc, target)
-    _log(log, f"[fetch] wrote {target} ({n_bytes:,} bytes)")
+    collisions = doc.pop("x-sdwan-mcp-schema-collisions", None)
+    if collisions:
+        _log(
+            log,
+            f"[fetch] WARNING: {len(collisions)} schema name(s) defined in "
+            f"multiple sections; kept first occurrence "
+            f"(sample: {sorted(collisions)[:3]})",
+        )
+
+    # Validate the in-memory doc BEFORE writing to disk so we never persist a
+    # spec that the loader would reject. The byte count is computed by
+    # serialising once; ``write_yaml`` re-serialises but that is fine for a
+    # one-shot operation.
+    serialised = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8")
+    n_bytes = len(serialised)
 
     validate_kwargs: dict[str, int] = {}
     if min_paths is not None:
@@ -173,6 +187,10 @@ async def fetch_version(
     warnings = validate(doc, yaml_bytes=n_bytes, **validate_kwargs)
     for w in warnings:
         _log(log, f"[fetch] WARNING: {w}")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_bytes(target, serialised)
+    _log(log, f"[fetch] wrote {target} ({n_bytes:,} bytes)")
     return target
 
 
@@ -206,21 +224,42 @@ async def fetch_version_safe(
     use_cache: bool = True,
     log: bool = True,
     verify_ssl: bool = True,
+    overall_timeout: float | None = None,
 ) -> Path:
-    """Variant of :func:`fetch_version` that re-raises with a friendlier message."""
+    """Variant of :func:`fetch_version` that re-raises with a friendlier message.
+
+    ``overall_timeout`` (seconds) sets a wall-clock deadline on the entire
+    fetch — discovery + all fragment downloads + stitching + validation. The
+    auto-fetch hook in ``server._connect_and_register`` passes 300 s so a
+    startup never blocks indefinitely on a slow DevNet.
+    """
+    coro = fetch_version(
+        version,
+        specs_dir=specs_dir,
+        force=force,
+        use_cache=use_cache,
+        log=log,
+        verify_ssl=verify_ssl,
+    )
     try:
-        return await fetch_version(
-            version,
-            specs_dir=specs_dir,
-            force=force,
-            use_cache=use_cache,
-            log=log,
-            verify_ssl=verify_ssl,
-        )
+        if overall_timeout is not None:
+            return await asyncio.wait_for(coro, timeout=overall_timeout)
+        return await coro
+    except TimeoutError as exc:
+        raise FetchError(
+            f"Timed out after {overall_timeout}s while fetching spec for vManage {version}. "
+            f"Try `sdwan-mcp fetch --version {version}` manually with a network you trust."
+        ) from exc
     except (DiscoveryError, FetchError, StitchError, FetcherValidationError) as exc:
+        # All low-level network errors are already converted to FetchError
+        # inside _request_with_retry, so this clause catches everything
+        # surfaced by the fetcher itself.
         raise FetchError(
             f"Could not fetch spec for vManage {version}: {exc}.\n"
             f"Run `sdwan-mcp fetch --version {version}` manually for a full trace."
         ) from exc
     except httpx.HTTPError as exc:
+        # Defence in depth: if _request_with_retry ever leaks a raw httpx
+        # error (e.g. through a refactor), surface it as FetchError rather
+        # than letting it bubble up untyped.
         raise FetchError(f"Network error fetching spec for vManage {version}: {exc}") from exc

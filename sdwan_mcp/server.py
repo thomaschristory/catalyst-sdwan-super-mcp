@@ -327,6 +327,7 @@ async def _connect_and_register(
             specs_dir=Path(config.sdwan.specs_dir),
             use_cache=False,
             log=True,
+            overall_timeout=300.0,
         )
         loader = SpecLoader(
             specs_dir=config.sdwan.specs_dir,

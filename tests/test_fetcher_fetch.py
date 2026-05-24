@@ -18,7 +18,13 @@ from sdwan_mcp.fetcher import (
     fetch_version,
     list_known_versions,
 )
-from sdwan_mcp.fetcher.fetch import _request_with_retry, make_client
+from sdwan_mcp.fetcher.discover import FragmentRef
+from sdwan_mcp.fetcher.fetch import (
+    _cache_path_for,
+    _parse_retry_after,
+    _request_with_retry,
+    make_client,
+)
 
 FIXTURES = Path(__file__).parent / "fetcher_fixtures"
 HTML_FIXTURE = FIXTURES / "devnet_minimal.html"
@@ -191,3 +197,91 @@ def test_known_versions_listed_with_cache_status(tmp_path: Path) -> None:
     assert by_version["20.15"].layout == "monolith"
     assert by_version["20.18"].layout == "split"
     assert isinstance(rows[0], VersionInfo)
+
+
+# ---------------------------------------------------------------------------
+# Hardening regression tests (review #32)
+# ---------------------------------------------------------------------------
+
+
+def test_cache_path_rejects_path_traversal(tmp_path: Path) -> None:
+    """A hostile fragment.rest must not escape the cache dir."""
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    bad = FragmentRef(
+        url="https://evil/x",
+        uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        kind="apis",
+        rest="../../../../etc/passwd",
+    )
+    with pytest.raises(FetchError, match="path traversal"):
+        _cache_path_for(bad, cache_dir)
+
+
+def test_cache_path_accepts_normal_rest(tmp_path: Path) -> None:
+    ok = FragmentRef(
+        url="https://x",
+        uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        kind="apis",
+        rest="v1/device/get.json",
+    )
+    p = _cache_path_for(ok, tmp_path)
+    assert p is not None
+    assert str(p).startswith(str(tmp_path.resolve()))
+
+
+def test_parse_retry_after_integer_seconds() -> None:
+    assert _parse_retry_after("5") == 5.0
+    assert _parse_retry_after("  3  ") == 3.0
+
+
+def test_parse_retry_after_caps_absurd_values() -> None:
+    # Must be capped, not honoured literally
+    big = _parse_retry_after("99999")
+    assert big is not None and big < 100
+
+
+def test_parse_retry_after_returns_none_on_garbage() -> None:
+    assert _parse_retry_after(None) is None
+    assert _parse_retry_after("not-a-number") is None
+    assert _parse_retry_after("-3") is None
+
+
+async def test_validation_failure_leaves_no_file_on_disk(
+    tmp_path: Path,
+    mocked_devnet: respx.MockRouter,
+) -> None:
+    """If validate raises, no half-baked YAML must persist."""
+    from sdwan_mcp.fetcher import FetcherValidationError
+
+    with pytest.raises(FetcherValidationError):
+        await fetch_version(
+            "20.99",
+            specs_dir=tmp_path,
+            use_cache=False,
+            log=False,
+            min_paths=10_000,  # well above the 3 paths in the fixture
+            min_yaml_bytes=0,
+        )
+    # Target must not exist
+    target = tmp_path / "20.99" / "vmanageapi_2099.yaml"
+    assert not target.exists(), "validation failure must not leave file behind"
+
+
+async def test_retry_after_header_is_honoured_on_429(respx_mock: respx.MockRouter) -> None:
+    """A 429 with Retry-After: 0 must not consume the full exponential delay."""
+    import time
+
+    route = respx_mock.get("https://example.com/throttled")
+    route.side_effect = [
+        httpx.Response(429, headers={"Retry-After": "0"}),
+        httpx.Response(200, text="ok"),
+    ]
+    async with make_client(timeout=5.0) as client:
+        t0 = time.monotonic()
+        resp = await _request_with_retry(client, "GET", "https://example.com/throttled")
+        elapsed = time.monotonic() - t0
+    assert resp.status_code == 200
+    # Even with jitter, the standard backoff on attempt 0 is up to 0.5s.
+    # Retry-After: 0 should make this near-instant.
+    assert elapsed < 0.25, f"Retry-After: 0 ignored — took {elapsed:.3f}s"

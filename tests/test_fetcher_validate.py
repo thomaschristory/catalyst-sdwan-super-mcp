@@ -57,6 +57,19 @@ def test_unresolved_schema_ref_fails() -> None:
         validate(doc)
 
 
+def test_collect_refs_is_iterative_not_recursive() -> None:
+    """Deeply nested allOf chains must not blow the Python recursion limit."""
+    doc = _minimal_doc()
+    # Build a 1500-deep allOf chain — pre-fix recursive implementation
+    # would hit Python's default 1000-frame limit.
+    deep: dict = {"type": "object"}
+    for _ in range(1500):
+        deep = {"allOf": [deep]}
+    doc["components"]["schemas"]["Deep"] = deep
+    # No $refs to chase but validate must not crash on the traversal.
+    validate(doc)
+
+
 def test_unresolved_example_ref_is_only_a_warning() -> None:
     doc = _minimal_doc()
     doc["paths"]["/p0"]["get"]["responses"]["200"]["content"] = {

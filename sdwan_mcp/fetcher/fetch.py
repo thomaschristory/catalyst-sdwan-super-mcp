@@ -118,23 +118,44 @@ async def _request_with_retry(
 ) -> httpx.Response:
     last_exc: Exception | None = None
     for attempt in range(MAX_ATTEMPTS):
+        retry_after: float | None = None
         try:
             resp = await client.request(method, url)
             if resp.status_code < 400:
                 return resp
             if resp.status_code not in RETRY_STATUSES:
                 raise FetchError(f"{method} {url} failed with HTTP {resp.status_code}")
+            retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
             last_exc = FetchError(f"{method} {url} returned HTTP {resp.status_code} (retryable)")
         except httpx.RequestError as exc:
             last_exc = exc
-        await _sleep_backoff(attempt)
+        if attempt < MAX_ATTEMPTS - 1:
+            await _sleep_backoff(attempt, override=retry_after)
     assert last_exc is not None
     raise FetchError(
         f"{method} {url} failed after {MAX_ATTEMPTS} attempts: {last_exc}"
     ) from last_exc
 
 
-async def _sleep_backoff(attempt: int) -> None:
+def _parse_retry_after(raw: str | None) -> float | None:
+    """Parse the ``Retry-After`` header; only integer-seconds form is honoured."""
+    if raw is None:
+        return None
+    try:
+        seconds = float(raw.strip())
+    except ValueError:
+        # We don't bother with HTTP-date form; backoff is already conservative.
+        return None
+    if seconds < 0:
+        return None
+    # Refuse absurdly long server hints; we cap at our own backoff_cap * 4.
+    return min(seconds, BACKOFF_CAP * 4)
+
+
+async def _sleep_backoff(attempt: int, *, override: float | None = None) -> None:
+    if override is not None:
+        await asyncio.sleep(override)
+        return
     raw = min(BACKOFF_CAP, BACKOFF_BASE * (2**attempt))
     half = raw / 2
     delay = half + random.uniform(0, half)
@@ -142,9 +163,26 @@ async def _sleep_backoff(attempt: int) -> None:
 
 
 def _cache_path_for(ref: FragmentRef, cache_dir: Path | None) -> Path | None:
+    """Map a fragment ref to its on-disk cache path, refusing path traversal.
+
+    ``ref.rest`` comes from a regex over the upstream HTML. We trust the regex
+    to exclude double-quotes, but it does not exclude ``..``. A malicious or
+    misconfigured upstream could otherwise produce a path that escapes
+    ``cache_dir`` once joined and resolved.
+    """
     if cache_dir is None:
         return None
-    return cache_dir / ref.uuid / ref.kind / ref.rest
+    cache_root = cache_dir.resolve()
+    candidate = (cache_root / ref.uuid / ref.kind / ref.rest).resolve()
+    # candidate must be strictly under cache_root
+    try:
+        candidate.relative_to(cache_root)
+    except ValueError as exc:
+        raise FetchError(
+            f"Refusing to cache fragment outside cache dir (suspected path "
+            f"traversal): rest={ref.rest!r}"
+        ) from exc
+    return candidate
 
 
 def _load_json(path: Path) -> dict[str, Any]:
