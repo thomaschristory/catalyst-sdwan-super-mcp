@@ -168,6 +168,7 @@ async def _connect_and_register(
         base_url=config.vmanage.base_url,
         auth=auth,
         verify_ssl=config.vmanage.verify_ssl,
+        pagination=config.sdwan.pagination,
     )
     dispatcher.set_index(index)
     await dispatcher.connect()
