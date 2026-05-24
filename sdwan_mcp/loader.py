@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -79,7 +79,7 @@ class OperationSpec:
     parameters: list[ParameterSpec] = field(default_factory=list)
     has_body: bool = False
     body_description: str = ""
-    pagination: str | None = None  # "scroll" | "offset" | None
+    pagination: Literal["scroll", "offset"] | None = None
 
 
 @dataclass
@@ -234,7 +234,7 @@ def _parse_parameters(raw_params: list[dict[str, Any]]) -> list[ParameterSpec]:
 _OFFSET_SIZE_PARAMS = {"pageSize", "count", "limit"}
 
 
-def _detect_pagination_style(parameters: list[ParameterSpec]) -> str | None:
+def _detect_pagination_style(parameters: list[ParameterSpec]) -> Literal["scroll", "offset"] | None:
     """
     Decide pagination style from a parsed parameter list.
 

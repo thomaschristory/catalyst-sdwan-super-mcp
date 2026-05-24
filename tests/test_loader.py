@@ -376,69 +376,55 @@ def test_default_max_actions_per_tool_is_150() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_spec(tmp_path, paths):
-    version_dir = tmp_path / "specs" / "20.99"
-    version_dir.mkdir(parents=True)
-    spec = {
-        "openapi": "3.0.0",
-        "info": {"title": "t", "version": "1.0"},
-        "paths": paths,
-    }
-    (version_dir / "ops.yaml").write_text(yaml.safe_dump(spec))
-    return tmp_path / "specs"
-
-
 def test_loader_detects_scroll_style(tmp_path):
-    paths = {
-        "/alarms": {
-            "get": {
-                "tags": ["Monitoring - Alarms"],
-                "operationId": "getAlarms",
-                "parameters": [
-                    {"name": "scrollId", "in": "query", "schema": {"type": "string"}},
-                ],
-            }
+    ops = [
+        {
+            "path": "/alarms",
+            "method": "get",
+            "tag": "Monitoring - Alarms",
+            "op_id": "getAlarms",
+            "params": [{"name": "scrollId", "in": "query", "schema": {"type": "string"}}],
         }
-    }
-    idx = SpecLoader(str(_write_spec(tmp_path, paths)), "20.99", read_write=False).load()
+    ]
+    idx = SpecLoader(str(_make_spec(tmp_path, "20.99", ops)), "20.99", read_write=False).load()
     op = next(iter(idx.by_action_name.values()))
     assert op.pagination == "scroll"
 
 
 def test_loader_detects_offset_style(tmp_path):
-    paths = {
-        "/devices": {
-            "get": {
-                "tags": ["Configuration - Devices"],
-                "operationId": "listDevices",
-                "parameters": [
-                    {"name": "page", "in": "query", "schema": {"type": "integer"}},
-                    {"name": "pageSize", "in": "query", "schema": {"type": "integer"}},
-                ],
-            }
+    ops = [
+        {
+            "path": "/devices",
+            "method": "get",
+            "tag": "Configuration - Devices",
+            "op_id": "listDevices",
+            "params": [
+                {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                {"name": "pageSize", "in": "query", "schema": {"type": "integer"}},
+            ],
         }
-    }
-    idx = SpecLoader(str(_write_spec(tmp_path, paths)), "20.99", read_write=False).load()
+    ]
+    idx = SpecLoader(str(_make_spec(tmp_path, "20.99", ops)), "20.99", read_write=False).load()
     op = next(iter(idx.by_action_name.values()))
     assert op.pagination == "offset"
 
 
 def test_loader_offset_with_count_or_limit(tmp_path):
     for size_param in ("count", "limit"):
-        paths = {
-            f"/items_{size_param}": {
-                "get": {
-                    "tags": ["Misc - Items"],
-                    "operationId": f"listItems_{size_param}",
-                    "parameters": [
-                        {"name": "page", "in": "query", "schema": {"type": "integer"}},
-                        {"name": size_param, "in": "query", "schema": {"type": "integer"}},
-                    ],
-                }
+        ops = [
+            {
+                "path": f"/items_{size_param}",
+                "method": "get",
+                "tag": "Misc - Items",
+                "op_id": f"listItems_{size_param}",
+                "params": [
+                    {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                    {"name": size_param, "in": "query", "schema": {"type": "integer"}},
+                ],
             }
-        }
+        ]
         idx = SpecLoader(
-            str(_write_spec(tmp_path / size_param, paths)),
+            str(_make_spec(tmp_path / size_param, "20.99", ops)),
             "20.99",
             read_write=False,
         ).load()
@@ -447,31 +433,29 @@ def test_loader_offset_with_count_or_limit(tmp_path):
 
 
 def test_loader_no_pagination_when_only_page_param(tmp_path):
-    paths = {
-        "/x": {
-            "get": {
-                "tags": ["Misc - X"],
-                "operationId": "listX",
-                "parameters": [
-                    {"name": "page", "in": "query", "schema": {"type": "integer"}},
-                ],
-            }
+    ops = [
+        {
+            "path": "/x",
+            "method": "get",
+            "tag": "Misc - X",
+            "op_id": "listX",
+            "params": [{"name": "page", "in": "query", "schema": {"type": "integer"}}],
         }
-    }
-    idx = SpecLoader(str(_write_spec(tmp_path, paths)), "20.99", read_write=False).load()
+    ]
+    idx = SpecLoader(str(_make_spec(tmp_path, "20.99", ops)), "20.99", read_write=False).load()
     op = next(iter(idx.by_action_name.values()))
     assert op.pagination is None
 
 
 def test_loader_no_pagination_for_plain_op(tmp_path):
-    paths = {
-        "/single": {
-            "get": {
-                "tags": ["Misc - Single"],
-                "operationId": "getSingle",
-            }
+    ops = [
+        {
+            "path": "/single",
+            "method": "get",
+            "tag": "Misc - Single",
+            "op_id": "getSingle",
         }
-    }
-    idx = SpecLoader(str(_write_spec(tmp_path, paths)), "20.99", read_write=False).load()
+    ]
+    idx = SpecLoader(str(_make_spec(tmp_path, "20.99", ops)), "20.99", read_write=False).load()
     op = next(iter(idx.by_action_name.values()))
     assert op.pagination is None
