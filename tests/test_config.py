@@ -46,3 +46,36 @@ transport:
 def test_load_config_missing_file(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         load_config(str(tmp_path / "nope.yaml"))
+
+
+def test_pagination_defaults(tmp_path):
+    from sdwan_mcp.config import load_config
+    cfg_file = tmp_path / "c.yaml"
+    cfg_file.write_text(
+        "vmanage:\n"
+        "  host: vm.test\n"
+        "sdwan:\n"
+        "  active_version: '20.18'\n"
+    )
+    cfg = load_config(str(cfg_file))
+    assert cfg.sdwan.pagination.enabled is True
+    assert cfg.sdwan.pagination.max_pages == 5
+    assert cfg.sdwan.pagination.page_size is None
+
+
+def test_pagination_overrides(tmp_path):
+    from sdwan_mcp.config import load_config
+    cfg_file = tmp_path / "c.yaml"
+    cfg_file.write_text(
+        "vmanage:\n"
+        "  host: vm.test\n"
+        "sdwan:\n"
+        "  pagination:\n"
+        "    enabled: false\n"
+        "    max_pages: 12\n"
+        "    page_size: 200\n"
+    )
+    cfg = load_config(str(cfg_file))
+    assert cfg.sdwan.pagination.enabled is False
+    assert cfg.sdwan.pagination.max_pages == 12
+    assert cfg.sdwan.pagination.page_size == 200
