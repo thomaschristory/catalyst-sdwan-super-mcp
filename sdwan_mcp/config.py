@@ -122,13 +122,14 @@ def load_config(path: str = "config.yaml") -> AppConfig:
     transport_raw = raw.get("transport", {})
 
     retries_raw = vmanage_raw.get("retries", {}) or {}
-    statuses_raw = retries_raw.get("statuses", [502, 503, 504])
+    retry_defaults = RetryConfig()
+    statuses_raw = retries_raw.get("statuses") or list(retry_defaults.statuses)
     retries = RetryConfig(
-        max_attempts=int(retries_raw.get("max_attempts", 3)),
+        max_attempts=int(retries_raw.get("max_attempts", retry_defaults.max_attempts)),
         statuses=tuple(int(s) for s in statuses_raw),
-        backoff_base=float(retries_raw.get("backoff_base", 0.5)),
-        backoff_cap=float(retries_raw.get("backoff_cap", 8.0)),
-        retry_mutating=bool(retries_raw.get("retry_mutating", False)),
+        backoff_base=float(retries_raw.get("backoff_base", retry_defaults.backoff_base)),
+        backoff_cap=float(retries_raw.get("backoff_cap", retry_defaults.backoff_cap)),
+        retry_mutating=bool(retries_raw.get("retry_mutating", retry_defaults.retry_mutating)),
     )
 
     vmanage = VManageConfig(

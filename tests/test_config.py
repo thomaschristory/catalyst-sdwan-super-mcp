@@ -59,6 +59,39 @@ def test_pagination_defaults(tmp_path):
     assert cfg.sdwan.pagination.page_size is None
 
 
+def test_retry_defaults(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "c.yaml"
+    cfg_file.write_text("vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n")
+    cfg = load_config(str(cfg_file))
+    assert cfg.vmanage.timeout == 30.0
+    assert cfg.vmanage.retries.max_attempts == 3
+    assert cfg.vmanage.retries.statuses == (502, 503, 504)
+    assert cfg.vmanage.retries.retry_mutating is False
+
+
+def test_retry_overrides_and_null_statuses(tmp_path: Path) -> None:
+    """`statuses: ~` (YAML null) must fall back to defaults, not crash."""
+    cfg_file = tmp_path / "c.yaml"
+    cfg_file.write_text(
+        "vmanage:\n"
+        "  host: vm.test\n"
+        "  timeout: 12.5\n"
+        "  retries:\n"
+        "    max_attempts: 5\n"
+        "    statuses: ~\n"
+        "    backoff_base: 1.0\n"
+        "    backoff_cap: 16.0\n"
+        "    retry_mutating: true\n"
+    )
+    cfg = load_config(str(cfg_file))
+    assert cfg.vmanage.timeout == 12.5
+    assert cfg.vmanage.retries.max_attempts == 5
+    assert cfg.vmanage.retries.statuses == (502, 503, 504)
+    assert cfg.vmanage.retries.backoff_base == 1.0
+    assert cfg.vmanage.retries.backoff_cap == 16.0
+    assert cfg.vmanage.retries.retry_mutating is True
+
+
 def test_pagination_overrides(tmp_path):
     from sdwan_mcp.config import load_config
 
