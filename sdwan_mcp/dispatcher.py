@@ -12,11 +12,14 @@ Handles:
 from __future__ import annotations
 
 import re
+from typing import Any, TypeAlias
 
 import httpx
 
 from .auth import VManageAuth
 from .loader import OperationSpec, SpecIndex
+
+DispatchResult: TypeAlias = dict[str, Any] | list[Any] | str
 
 
 class Dispatcher:
@@ -61,7 +64,7 @@ class Dispatcher:
         """Attach the spec index so the dispatcher can resolve operationIds."""
         self._index = index
 
-    async def call(self, action_name: str, params: dict) -> dict:
+    async def call(self, action_name: str, params: dict[str, Any]) -> DispatchResult:
         """
         Execute an API call for the given derived action name.
 
@@ -87,7 +90,9 @@ class Dispatcher:
     # Internal
     # ------------------------------------------------------------------
 
-    async def _execute_with_retry(self, op: OperationSpec, params: dict) -> dict:
+    async def _execute_with_retry(
+        self, op: OperationSpec, params: dict[str, Any]
+    ) -> DispatchResult:
         """
         Proactively refresh token if needed, execute request,
         re-authenticate once on unexpected session expiry.
@@ -105,15 +110,15 @@ class Dispatcher:
 
         return response
 
-    async def _execute(self, op: OperationSpec, raw_params: dict) -> dict:
+    async def _execute(self, op: OperationSpec, raw_params: dict[str, Any]) -> DispatchResult:
         # Split params by location
         path_param_names = {p.name for p in op.parameters if p.location == "path"}
         query_param_names = {p.name for p in op.parameters if p.location == "query"}
 
-        path_params: dict = {}
-        query_params: dict = {}
-        body_params: dict = {}
-        unknown_params: dict = {}
+        path_params: dict[str, Any] = {}
+        query_params: dict[str, Any] = {}
+        body_params: dict[str, Any] = {}
+        unknown_params: dict[str, Any] = {}
 
         for key, value in (raw_params or {}).items():
             if value is None:
@@ -186,9 +191,13 @@ class Dispatcher:
 # ---------------------------------------------------------------------------
 
 
-def _safe_json(response: httpx.Response) -> dict | list | str:
+def _safe_json(response: httpx.Response) -> DispatchResult:
     """Try JSON parse; fall back to raw text."""
     try:
-        return response.json()
+        data = response.json()
     except Exception:
         return {"raw": response.text}
+
+    if isinstance(data, (dict, list, str)):
+        return data
+    return {"raw": str(data)}

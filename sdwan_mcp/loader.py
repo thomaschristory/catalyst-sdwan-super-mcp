@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -203,16 +204,17 @@ def _derive_action_name(method: str, path: str, tag: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _extract_type(schema: dict) -> str:
+def _extract_type(schema: dict[str, Any]) -> str:
     if not schema:
         return "string"
     if "$ref" in schema:
         return "object"
-    return schema.get("type", "string")
+    t = schema.get("type", "string")
+    return t if isinstance(t, str) else "string"
 
 
-def _parse_parameters(raw_params: list[dict]) -> list[ParameterSpec]:
-    result = []
+def _parse_parameters(raw_params: list[dict[str, Any]]) -> list[ParameterSpec]:
+    result: list[ParameterSpec] = []
     for p in raw_params or []:
         schema = p.get("schema", {})
         result.append(
@@ -231,7 +233,7 @@ def _parse_parameters(raw_params: list[dict]) -> list[ParameterSpec]:
 def _parse_operation(
     path: str,
     method: str,
-    operation: dict,
+    operation: dict[str, Any],
     tag: str,
 ) -> OperationSpec:
     has_body = "requestBody" in operation
@@ -492,7 +494,7 @@ class SpecLoader:
     # Step 1: load all sub-spec files and merge into one dict
     # ------------------------------------------------------------------
 
-    def _load_and_merge(self) -> dict:
+    def _load_and_merge(self) -> dict[str, Any]:
         spec_files = sorted(
             list(self.version_dir.glob("*.yaml"))
             + list(self.version_dir.glob("*.yml"))
@@ -503,7 +505,7 @@ class SpecLoader:
                 f"No spec files (*.yaml | *.yml | *.json) found in {self.version_dir}"
             )
 
-        merged: dict = {
+        merged: dict[str, Any] = {
             "paths": {},
             "components": {"schemas": {}},
         }
@@ -532,7 +534,7 @@ class SpecLoader:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_operations(spec: dict) -> list[OperationSpec]:
+    def _extract_operations(spec: dict[str, Any]) -> list[OperationSpec]:
         ops: list[OperationSpec] = []
         for path, path_item in spec.get("paths", {}).items():
             for method, operation in path_item.items():
