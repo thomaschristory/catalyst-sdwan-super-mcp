@@ -80,17 +80,13 @@ def test_pagination_overrides(tmp_path):
 
 def test_transport_auth_defaults_to_none(tmp_path: Path) -> None:
     cfg = tmp_path / "c.yaml"
-    cfg.write_text(
-        "vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n"
-    )
+    cfg.write_text("vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n")
     config = load_config(str(cfg))
     assert config.transport.auth.type == "none"
     assert config.transport.auth.token == ""
 
 
-def test_transport_auth_bearer_with_token(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_transport_auth_bearer_with_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SDWAN_MCP_TOKEN", "s3cret-token")
     cfg = tmp_path / "c.yaml"
     cfg.write_text(
@@ -127,7 +123,7 @@ transport:
     type: bearer
 """
     )
-    with pytest.raises(ValueError, match="transport.auth.type=bearer requires"):
+    with pytest.raises(ValueError, match=r"transport\.auth\.type=bearer requires"):
         load_config(str(cfg))
 
 
@@ -146,7 +142,7 @@ transport:
     token: leftover-paste
 """
     )
-    with pytest.raises(ValueError, match="token configured but transport.auth.type=none"):
+    with pytest.raises(ValueError, match=r"token configured but transport\.auth\.type=none"):
         load_config(str(cfg))
 
 
@@ -163,7 +159,7 @@ transport:
     type: oidc
 """
     )
-    with pytest.raises(ValueError, match="unknown transport.auth.type"):
+    with pytest.raises(ValueError, match=r"unknown transport\.auth\.type"):
         load_config(str(cfg))
 
 
@@ -174,7 +170,7 @@ def test_transport_auth_bearer_env_var_unset_raises(
     cfg = tmp_path / "c.yaml"
     cfg.write_text(
         "vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n"
-        "transport:\n  auth:\n    type: bearer\n    token: \"${SDWAN_MCP_TOKEN}\"\n"
+        'transport:\n  auth:\n    type: bearer\n    token: "${SDWAN_MCP_TOKEN}"\n'
     )
-    with pytest.raises(ValueError, match="transport.auth.type=bearer requires"):
+    with pytest.raises(ValueError, match=r"transport\.auth\.type=bearer requires"):
         load_config(str(cfg))

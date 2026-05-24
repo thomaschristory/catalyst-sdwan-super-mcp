@@ -224,9 +224,7 @@ async def _connect_and_register(
 
 def build_and_run(args: argparse.Namespace) -> None:
     """FastMCP.run() owns its own event loop, so async pre-flight runs first."""
-    mcp, dispatcher, transport, host, port, middleware = asyncio.run(
-        _connect_and_register(args)
-    )
+    mcp, dispatcher, transport, host, port, middleware = asyncio.run(_connect_and_register(args))
 
     try:
         if transport == "stdio":

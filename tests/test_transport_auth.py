@@ -205,9 +205,7 @@ async def test_server_http_with_bearer_installs_middleware(
         loader_cls.return_value.load.return_value = MagicMock()
         disp_cls.return_value.connect = AsyncMock()
 
-        _, _, _, host, _, middleware = await server._connect_and_register(
-            _make_args(config_path)
-        )
+        _, _, _, host, _, middleware = await server._connect_and_register(_make_args(config_path))
 
     assert host == "0.0.0.0"  # not demoted; bearer is configured
     assert len(middleware) == 1

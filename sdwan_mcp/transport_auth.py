@@ -51,10 +51,8 @@ def decide_bind(
 
     warnings = [
         f"refusing to bind {host} with transport.auth.type=none.",
-        "Demoting bind to 127.0.0.1. To expose externally, set "
-        "transport.auth.type=bearer",
-        "and transport.auth.token, OR set transport.auth.type=none "
-        "explicitly AND pass",
+        "Demoting bind to 127.0.0.1. To expose externally, set transport.auth.type=bearer",
+        "and transport.auth.token, OR set transport.auth.type=none explicitly AND pass",
         "--insecure-allow-public to acknowledge the risk.",
     ]
     return "127.0.0.1", warnings
@@ -73,9 +71,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             raise ValueError("BearerAuthMiddleware requires a non-empty expected_token")
         self._expected_token = expected_token
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         header = request.headers.get("authorization", "")
         scheme, _, token = header.partition(" ")
         if scheme.lower() != "bearer" or not token:
