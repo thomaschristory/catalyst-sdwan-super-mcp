@@ -2,6 +2,50 @@
 
 The server speaks the [Model Context Protocol](https://modelcontextprotocol.io). Any compliant client can attach to it.
 
+## Setting the bearer token
+
+When `transport.auth.type: bearer` is configured (see
+[configuration reference](../reference/configuration.md)), every HTTP
+request must include:
+
+```
+Authorization: Bearer <your-token>
+```
+
+How you set this depends on the client:
+
+- **Claude Desktop** — add a `headers` block under the SSE/streamable-http
+  server entry in `claude_desktop_config.json`:
+
+  ```json
+  {
+    "mcpServers": {
+      "sdwan": {
+        "url": "http://your-host:8000/mcp",
+        "headers": {
+          "Authorization": "Bearer ${SDWAN_MCP_TOKEN}"
+        }
+      }
+    }
+  }
+  ```
+
+- **fastmcp Python client** — pass `headers=` when constructing the client:
+
+  ```python
+  from fastmcp import Client
+
+  async with Client(
+      "http://your-host:8000/mcp",
+      headers={"Authorization": f"Bearer {os.environ['SDWAN_MCP_TOKEN']}"},
+  ) as client:
+      ...
+  ```
+
+- **Cline / Continue / other MCP clients** — check the client's docs for
+  custom HTTP headers. The header name is `Authorization`, the value is
+  `Bearer <token>`.
+
 ## Claude Desktop (stdio)
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the equivalent on Windows:
@@ -65,4 +109,6 @@ For clients that connect over the network rather than spawning a subprocess:
 uv run sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
 ```
 
-⚠ **No auth middleware yet** — don't expose the SSE port to anything untrusted. Track [issue](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues) labeled `security`.
+When exposing the server over the network, configure bearer token auth via
+`transport.auth.type: bearer` in `config.yaml` and set the header on the client
+as shown in the [Setting the bearer token](#setting-the-bearer-token) section above.

@@ -9,6 +9,7 @@ sdwan-mcp [-h] [--version-info]
           [--version VERSION]
           [--diff OLD NEW]
           [--max-actions-per-tool N]
+          [--insecure-allow-public]
 ```
 
 ## Flags
@@ -23,6 +24,7 @@ sdwan-mcp [-h] [--version-info]
 | `--version VERSION` | from config | Override the active spec version. |
 | `--diff OLD NEW` | n/a | Print a diff between two spec versions, then exit. |
 | `--max-actions-per-tool N` | from config (`150`) | Cap before the [adaptive splitter](../guides/tool-splitting.md) recurses. `0` disables splitting. |
+| `--insecure-allow-public` | off | Allow binding to a non-loopback host with `transport.auth.type=none`. Without this flag, such a bind is auto-demoted to `127.0.0.1` with a stderr WARNING. Only use this when the server sits behind a trusted authenticating reverse proxy (mTLS, OIDC, a corporate auth gateway). The flag is intentionally verbose to discourage casual use. |
 | `--version-info` | n/a | Print version and exit. |
 
 ## Examples
