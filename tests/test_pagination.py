@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
+import respx
+import yaml
 
-from sdwan_mcp.loader import OperationSpec, ParameterSpec
+from sdwan_mcp.auth import VManageAuth
+from sdwan_mcp.config import PaginationConfig
+from sdwan_mcp.dispatcher import Dispatcher
+from sdwan_mcp.loader import OperationSpec, ParameterSpec, SpecLoader
 from sdwan_mcp.pagination import (
     OffsetPaginator,
     ScrollPaginator,
@@ -306,3 +312,179 @@ async def test_offset_resumes_from_user_supplied_page():
     )
     # Short page (3 < 100) → stop without cursor.
     assert result["pagination"]["truncated"] is False
+
+
+# ---------------------------------------------------------------------------
+# Dispatcher integration tests
+# ---------------------------------------------------------------------------
+
+
+def _paginated_spec_dir(tmp_path):
+    version_dir = tmp_path / "specs" / "20.99"
+    version_dir.mkdir(parents=True)
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "t", "version": "1.0"},
+        "paths": {
+            "/alarms": {
+                "get": {
+                    "tags": ["Monitoring - Alarms"],
+                    "operationId": "getAlarms",
+                    "parameters": [
+                        {"name": "scrollId", "in": "query", "schema": {"type": "string"}},
+                    ],
+                }
+            },
+            "/devices": {
+                "get": {
+                    "tags": ["Configuration - Devices"],
+                    "operationId": "listDevices",
+                    "parameters": [
+                        {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                        {"name": "pageSize", "in": "query", "schema": {"type": "integer"}},
+                    ],
+                }
+            },
+            "/single": {
+                "get": {
+                    "tags": ["Misc - Single"],
+                    "operationId": "getSingle",
+                }
+            },
+        },
+    }
+    (version_dir / "ops.yaml").write_text(yaml.safe_dump(spec))
+    return tmp_path / "specs"
+
+
+def _make_dispatcher(specs_dir, *, pagination):
+    index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
+    auth = VManageAuth(
+        host="vm.test", port=8443, username="a", password="b",
+        verify_ssl=False, use_jwt=True,
+    )
+    auth._jwt_token = "fake"
+    auth._xsrf_token = "fake"
+    auth._token_expires_at = 1e18
+
+    d = Dispatcher(
+        base_url="https://vm.test:8443/dataservice",
+        auth=auth,
+        verify_ssl=False,
+        pagination=pagination,
+    )
+    d.set_index(index)
+    return d
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_scroll_full_drain(tmp_path):
+    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+    action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
+
+    with respx.mock(assert_all_called=True) as router:
+        route = router.get("https://vm.test:8443/dataservice/alarms")
+        route.mock(side_effect=[
+            httpx.Response(200, json={
+                "data": [{"i": 1}],
+                "pageInfo": {"scrollId": "c1", "hasMoreData": True, "count": 1, "totalCount": 2},
+            }),
+            httpx.Response(200, json={
+                "data": [{"i": 2}],
+                "pageInfo": {"scrollId": "c2", "hasMoreData": False, "count": 1, "totalCount": 2},
+            }),
+        ])
+
+        result = await d.call(action, {})
+
+    assert result["data"] == [{"i": 1}, {"i": 2}]
+    assert result["pagination"]["pages_fetched"] == 2
+    assert result["pagination"]["truncated"] is False
+    assert route.calls[1].request.url.params["scrollId"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_offset_truncated_via_override(tmp_path):
+    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig(max_pages=5))
+    action = next(a for a in d._index.by_action_name if "device" in a.lower())
+
+    with respx.mock(assert_all_called=True) as router:
+        route = router.get("https://vm.test:8443/dataservice/devices")
+        route.mock(return_value=httpx.Response(200, json={"data": list(range(10))}))
+
+        result = await d.call(action, {"pageSize": 10, "_max_pages": 2})
+
+    assert result["pagination"]["truncated"] is True
+    assert result["pagination"]["next_cursor"] == {"page": 3, "pageSize": 10}
+    assert len(route.calls) == 2
+    # Reserved params must never reach the wire.
+    for call in route.calls:
+        assert "_max_pages" not in call.request.url.params
+        assert "_page_size" not in call.request.url.params
+        assert "_pagination" not in call.request.url.params
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_opt_out_returns_raw_first_page(tmp_path):
+    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+    action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
+
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/alarms").mock(
+            return_value=httpx.Response(200, json={
+                "data": [{"i": 1}],
+                "pageInfo": {"scrollId": "c1", "hasMoreData": True},
+            })
+        )
+        result = await d.call(action, {"_pagination": "off"})
+
+    # Raw shape — no wrapper.
+    assert "pagination" not in result
+    assert result["pageInfo"]["scrollId"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_disabled_globally(tmp_path):
+    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig(enabled=False))
+    action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
+
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/alarms").mock(
+            return_value=httpx.Response(200, json={
+                "data": [{"i": 1}],
+                "pageInfo": {"scrollId": "c1", "hasMoreData": True},
+            })
+        )
+        result = await d.call(action, {})
+
+    assert "pagination" not in result
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_non_paginated_op_unchanged(tmp_path):
+    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+    action = next(a for a in d._index.by_action_name if "single" in a.lower())
+
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/single").mock(
+            return_value=httpx.Response(200, json={"hello": "world"})
+        )
+        result = await d.call(action, {})
+
+    assert result == {"hello": "world"}
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_user_supplied_cursor_resumes(tmp_path):
+    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+    action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
+
+    with respx.mock(assert_all_called=True) as router:
+        route = router.get("https://vm.test:8443/dataservice/alarms")
+        route.mock(return_value=httpx.Response(200, json={
+            "data": [{"i": 99}],
+            "pageInfo": {"scrollId": "cN", "hasMoreData": False},
+        }))
+        await d.call(action, {"scrollId": "resume-from-here"})
+
+    assert route.calls[0].request.url.params["scrollId"] == "resume-from-here"
