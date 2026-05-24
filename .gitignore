@@ -32,3 +32,6 @@ site/
 .idea/
 .vscode/
 *.swp
+
+# Claude Code agent state — per-clone, not source-of-truth
+.claude/

@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Live ingestion of split-spec vManage versions (>=20.16). If
+  `specs/<active_version>/` is missing on startup, the loader fetches
+  ~14k OpenAPI fragments from `developer.cisco.com`, stitches them into a
+  single YAML, validates it, and writes
+  `specs/<version>/vmanageapi_<flat>.yaml` before registering tools.
+  Disable with `sdwan.auto_fetch: false`. Explicit `sdwan-mcp fetch
+  --version <V>` and `sdwan-mcp list-versions` subcommands are also
+  available; the explicit path caches fragments under
+  `~/.cache/sdwan-mcp/fragments/`. (#31)
 - HTTP transport auth: `transport.auth.{type,token}` config block. `type: bearer`
   requires `Authorization: Bearer <token>` on every request, compared in
   constant time, with an RFC 6750 `WWW-Authenticate` challenge on 401.

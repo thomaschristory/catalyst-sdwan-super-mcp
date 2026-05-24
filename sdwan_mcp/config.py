@@ -65,6 +65,10 @@ class SDWANConfig:
     active_version: str = "20.18"
     max_actions_per_tool: int = 150  # 0 disables splitting (one tool per section)
     pagination: PaginationConfig = field(default_factory=PaginationConfig)
+    # True (default): if specs/<active_version>/ is missing, fetch from
+    # developer.cisco.com on startup. Set false to require pre-staged specs
+    # (air-gapped deployments).
+    auto_fetch: bool = True
 
 
 _VALID_AUTH_TYPES: frozenset[str] = frozenset({"none", "bearer"})
@@ -185,6 +189,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         active_version=str(sdwan_raw.get("active_version", "20.18")),
         max_actions_per_tool=int(sdwan_raw.get("max_actions_per_tool", 150)),
         pagination=pagination,
+        auto_fetch=bool(sdwan_raw.get("auto_fetch", True)),
     )
 
     auth_raw = transport_raw.get("auth", {}) or {}

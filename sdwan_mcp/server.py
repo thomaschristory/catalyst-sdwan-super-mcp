@@ -9,6 +9,10 @@ Usage:
   sdwan-mcp --version 20.18                          # override spec version
   sdwan-mcp --diff 20.15 20.18                       # diff two versions and exit
   sdwan-mcp --config path/to/config.yaml             # custom config file
+
+  sdwan-mcp fetch --version 20.19                    # download + stitch spec
+  sdwan-mcp fetch --all-known                        # pre-warm every known version
+  sdwan-mcp list-versions                            # show known versions + cache status
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import load_dotenv
@@ -24,9 +29,15 @@ from starlette.middleware import Middleware
 
 from . import __version__
 from .auth import VManageAuth
-from .config import load_config
+from .config import AppConfig, load_config
 from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
+from .fetcher import (
+    KNOWN_VERSIONS,
+    FetchError,
+    fetch_version_safe,
+    list_known_versions,
+)
 from .loader import SpecLoader
 from .tools import register_tools
 from .transport_auth import BearerAuthMiddleware, decide_bind
@@ -37,6 +48,9 @@ _VALID_TRANSPORTS: frozenset[str] = frozenset({"stdio", "sse", "streamable-http"
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+
+_SUBCOMMANDS: frozenset[str] = frozenset({"fetch", "list-versions"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -111,6 +125,64 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand parsers (fetch, list-versions)
+# ---------------------------------------------------------------------------
+
+
+def _build_fetch_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="sdwan-mcp fetch",
+        description=(
+            "Download the OpenAPI fragments for a vManage version from "
+            "developer.cisco.com and stitch them into a single YAML under "
+            "specs/<version>/."
+        ),
+    )
+    p.add_argument(
+        "--config",
+        default="config.yaml",
+        metavar="PATH",
+        help="Path to config.yaml (default: ./config.yaml). Used only to "
+        "resolve sdwan.specs_dir; vManage credentials are not required.",
+    )
+    p.add_argument(
+        "--version",
+        metavar="VERSION",
+        help="Spec version to fetch, e.g. '20.19'.",
+    )
+    p.add_argument(
+        "--all-known",
+        action="store_true",
+        help="Fetch every version in KNOWN_VERSIONS (skips ones already cached).",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Refetch even if specs/<version>/ already has a YAML.",
+    )
+    p.add_argument(
+        "--no-fragment-cache",
+        action="store_true",
+        help="Do not write per-fragment JSONs to ~/.cache/sdwan-mcp/fragments/.",
+    )
+    return p
+
+
+def _build_list_versions_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="sdwan-mcp list-versions",
+        description="Print known spec versions and on-disk cache status.",
+    )
+    p.add_argument(
+        "--config",
+        default="config.yaml",
+        metavar="PATH",
+        help="Path to config.yaml (default: ./config.yaml).",
+    )
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Diff mode
 # ---------------------------------------------------------------------------
 
@@ -119,6 +191,62 @@ def run_diff(specs_dir: str, old_version: str, new_version: str) -> None:
     print(f"Comparing specs: {old_version} -> {new_version}")
     diff = diff_versions(specs_dir, old_version, new_version)
     print_diff(diff)
+
+
+# ---------------------------------------------------------------------------
+# Fetch subcommand handlers
+# ---------------------------------------------------------------------------
+
+
+def _load_config_or_default(config_path: str) -> AppConfig:
+    """Load config if present; otherwise return defaults (fetch needs no vManage creds)."""
+    try:
+        return load_config(config_path)
+    except FileNotFoundError:
+        return AppConfig()
+
+
+def run_fetch(argv: list[str]) -> int:
+    parser = _build_fetch_parser()
+    args = parser.parse_args(argv)
+    if not args.version and not args.all_known:
+        parser.error("specify --version VERSION or --all-known")
+    load_dotenv()
+    config = _load_config_or_default(args.config)
+    specs_dir = Path(config.sdwan.specs_dir)
+    versions = list(KNOWN_VERSIONS) if args.all_known else [args.version]
+
+    async def _runner() -> int:
+        rc = 0
+        for v in versions:
+            try:
+                target = await fetch_version_safe(
+                    v,
+                    specs_dir=specs_dir,
+                    force=args.force,
+                    use_cache=not args.no_fragment_cache,
+                    log=True,
+                    verify_ssl=True,
+                )
+                print(f"[fetch] OK  {v} -> {target}", file=sys.stderr)
+            except FetchError as exc:
+                print(f"[fetch] FAIL {v}: {exc}", file=sys.stderr)
+                rc = 1
+        return rc
+
+    return asyncio.run(_runner())
+
+
+def run_list_versions(argv: list[str]) -> int:
+    parser = _build_list_versions_parser()
+    args = parser.parse_args(argv)
+    config = _load_config_or_default(args.config)
+    rows = list_known_versions(Path(config.sdwan.specs_dir))
+    width = max(len(r.version) for r in rows)
+    for r in rows:
+        cached = "cached    " if r.cached else "not cached"
+        print(f"{r.version:<{width}}  {r.layout:<8}  {cached}")
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -179,12 +307,33 @@ async def _connect_and_register(
         else config.sdwan.max_actions_per_tool
     )
 
-    loader = SpecLoader(
-        specs_dir=config.sdwan.specs_dir,
-        version=version,
-        read_write=read_write,
-        max_actions_per_tool=max_actions,
-    )
+    try:
+        loader = SpecLoader(
+            specs_dir=config.sdwan.specs_dir,
+            version=version,
+            read_write=read_write,
+            max_actions_per_tool=max_actions,
+        )
+    except FileNotFoundError:
+        if not config.sdwan.auto_fetch:
+            raise
+        print(
+            f"[server] specs/{version}/ not found — auto-fetching from "
+            "developer.cisco.com (set sdwan.auto_fetch: false to disable)",
+            file=sys.stderr,
+        )
+        await fetch_version_safe(
+            version,
+            specs_dir=Path(config.sdwan.specs_dir),
+            use_cache=False,
+            log=True,
+        )
+        loader = SpecLoader(
+            specs_dir=config.sdwan.specs_dir,
+            version=version,
+            read_write=read_write,
+            max_actions_per_tool=max_actions,
+        )
     index = loader.load()
 
     auth = VManageAuth(
@@ -249,6 +398,14 @@ def build_and_run(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw = sys.argv[1:] if argv is None else argv
+    if raw and raw[0] in _SUBCOMMANDS:
+        cmd, rest = raw[0], raw[1:]
+        if cmd == "fetch":
+            return run_fetch(rest)
+        if cmd == "list-versions":
+            return run_list_versions(rest)
+
     args = parse_args(argv)
 
     if args.diff:
