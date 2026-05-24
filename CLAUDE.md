@@ -195,6 +195,10 @@ sdwan:
   specs_dir: ./specs
   active_version: "20.18"
   max_actions_per_tool: 150         # default; 0 disables splitting (see docs/guides/tool-splitting.md)
+  pagination:
+    enabled: true                   # master switch for auto-follow
+    max_pages: 5                    # cap on stitched pages per call
+    page_size: null                 # offset-style override; null = endpoint default
 
 transport:
   mode: stdio                       # stdio | sse | streamable-http
@@ -428,6 +432,10 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 | Spec formats | YAML, YML, **and JSON** | Cisco publishes 20.15 as YAML-with-`.json`-extension, 20.16/20.18 as plain YAML; we accept all three extensions. |
 | Transport | Flag at runtime | stdio for local, SSE/HTTP for remote/tunneled |
 | Docker | Volume-mounted specs | Upgrade specs without rebuilding image |
+| Pagination strategy | Hybrid auto-follow + cursor | Common case "just works"; truncation honest, resumable. (#8) |
+| Pagination knobs | Config defaults + `_*` reserved params | Server-wide default, per-call override without bloating action params. (#8) |
+| Pagination response shape | Always wrap when paginated (`{data, pagination}`) | Predictable signal to LLM that auto-follow ran. (#8) |
+| Pagination detection | Spec-load time from param names | Cheap, deterministic; response sanity-check covers drift. (#8) |
 
 ---
 

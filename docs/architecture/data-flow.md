@@ -35,6 +35,12 @@ dispatcher:
     ↓ auth.login() again
     ↓ retry once
 
+  ↓ if op.pagination is set and pagination enabled (and _pagination != "off"):
+    ↓ route to ScrollPaginator or OffsetPaginator
+      (calls back into the single-page executor up to max_pages)
+      stitch pages → wrap as {data, pagination, ...rest}
+  ↓ else: return single-page JSON as before
+
   ↓ return JSON (or error dict if non-2xx)
 ```
 
