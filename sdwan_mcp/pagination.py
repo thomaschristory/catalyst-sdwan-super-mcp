@@ -121,7 +121,7 @@ class ScrollPaginator:
         params: dict,
         executor: Executor,
         max_pages: int,
-        page_size: int | None,  # noqa: ARG002 — irrelevant for scroll
+        page_size: int | None,  # ignored — irrelevant for scroll
     ) -> dict:
         pages: list[dict] = []
         cursor: str | None = params.get("scrollId")

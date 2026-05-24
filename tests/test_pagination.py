@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sdwan_mcp.pagination import _first_list_key, stitch
+from sdwan_mcp.loader import OperationSpec, ParameterSpec
+from sdwan_mcp.pagination import ScrollPaginator, _first_list_key, stitch
 
 
 def test_first_list_key_returns_data_when_present():
@@ -51,10 +52,6 @@ def test_stitch_drops_pageInfo_from_root():
     assert "pageInfo" not in result
 
 
-from sdwan_mcp.loader import OperationSpec, ParameterSpec
-from sdwan_mcp.pagination import ScrollPaginator
-
-
 def _scroll_op(method: str = "get") -> OperationSpec:
     return OperationSpec(
         operation_id="getAlarms",
@@ -73,7 +70,7 @@ def _scroll_pages(*, with_more: list[bool], cursors: list[str]):
     """Build a list of fake response dicts matching pageInfo shape."""
     assert len(with_more) == len(cursors)
     out = []
-    for i, (more, cursor) in enumerate(zip(with_more, cursors)):
+    for i, (more, cursor) in enumerate(zip(with_more, cursors, strict=True)):
         out.append({
             "data": [{"i": i, "n": 0}, {"i": i, "n": 1}],
             "pageInfo": {
