@@ -9,9 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - HTTP transport auth: `transport.auth.{type,token}` config block. `type: bearer`
-  requires `Authorization: Bearer <token>` on every request (#7).
+  requires `Authorization: Bearer <token>` on every request, compared in
+  constant time, with an RFC 6750 `WWW-Authenticate` challenge on 401.
+  Rejection logs are rate-limited (10 lines / 60s window) to resist log-flood
+  attacks. Tokens shorter than 8 chars are rejected at startup, under 16 chars
+  warn. (#7)
 - New CLI flag `--insecure-allow-public` to acknowledge binding a non-loopback
   host without auth.
+- Configurable per-request timeout (`vmanage.timeout`, default 30s) and
+  transient-failure retry policy (`vmanage.retries`) on the httpx client.
+  Retries 502 / 503 / 504 and `httpx.RequestError` (timeouts, connection
+  resets) with exponential backoff + equal jitter, capped. Mutating verbs
+  (POST/PUT/DELETE/PATCH) are not retried by default. (#9)
 - Response pagination for bulk endpoints. Auto-follows scroll and offset
   endpoint families up to `sdwan.pagination.max_pages` (default 5), then
   surfaces a resumable cursor under `pagination.next_cursor`. Per-call

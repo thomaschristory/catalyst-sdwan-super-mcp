@@ -26,6 +26,17 @@ _TOKEN_SOFT_MIN = 16
 
 
 @dataclass
+class RetryConfig:
+    """Retry policy for transient HTTP failures from vManage / its load balancer."""
+
+    max_attempts: int = 3  # total attempts including the first try
+    statuses: tuple[int, ...] = (502, 503, 504)
+    backoff_base: float = 0.5  # seconds; first backoff is base * 2**0
+    backoff_cap: float = 8.0  # seconds; upper bound on a single backoff
+    retry_mutating: bool = False  # by default, only GET is retried
+
+
+@dataclass
 class VManageConfig:
     host: str
     port: int = 8443
@@ -33,6 +44,8 @@ class VManageConfig:
     username: str = ""
     password: str = ""
     use_jwt: bool = True  # True = JWT (20.18.1+), False = session-based
+    timeout: float = 30.0  # seconds, applied to every vManage HTTP request
+    retries: RetryConfig = field(default_factory=RetryConfig)
 
     @property
     def base_url(self) -> str:
@@ -134,6 +147,17 @@ def load_config(path: str = "config.yaml") -> AppConfig:
     sdwan_raw = raw.get("sdwan", {})
     transport_raw = raw.get("transport", {})
 
+    retries_raw = vmanage_raw.get("retries", {}) or {}
+    retry_defaults = RetryConfig()
+    statuses_raw = retries_raw.get("statuses") or list(retry_defaults.statuses)
+    retries = RetryConfig(
+        max_attempts=int(retries_raw.get("max_attempts", retry_defaults.max_attempts)),
+        statuses=tuple(int(s) for s in statuses_raw),
+        backoff_base=float(retries_raw.get("backoff_base", retry_defaults.backoff_base)),
+        backoff_cap=float(retries_raw.get("backoff_cap", retry_defaults.backoff_cap)),
+        retry_mutating=bool(retries_raw.get("retry_mutating", retry_defaults.retry_mutating)),
+    )
+
     vmanage = VManageConfig(
         host=vmanage_raw.get("host", ""),
         port=int(vmanage_raw.get("port", 8443)),
@@ -141,6 +165,8 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         username=vmanage_raw.get("username", ""),
         password=vmanage_raw.get("password", ""),
         use_jwt=bool(vmanage_raw.get("use_jwt", True)),
+        timeout=float(vmanage_raw.get("timeout", 30.0)),
+        retries=retries,
     )
 
     pagination_raw = sdwan_raw.get("pagination", {}) or {}

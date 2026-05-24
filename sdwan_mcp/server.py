@@ -199,7 +199,9 @@ async def _connect_and_register(
         base_url=config.vmanage.base_url,
         auth=auth,
         verify_ssl=config.vmanage.verify_ssl,
+        timeout=config.vmanage.timeout,
         pagination=config.sdwan.pagination,
+        retry=config.vmanage.retries,
     )
     dispatcher.set_index(index)
     await dispatcher.connect()
