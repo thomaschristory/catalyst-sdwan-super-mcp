@@ -105,3 +105,44 @@ def stitch(pages: list[dict], style: str, next_cursor: dict | None) -> dict:
         "next_cursor": next_cursor,
     }
     return out
+
+
+# ---------------------------------------------------------------------------
+# Scroll paginator
+# ---------------------------------------------------------------------------
+
+
+class ScrollPaginator:
+    """Elasticsearch-style cursor pagination via scrollId / pageInfo.hasMoreData."""
+
+    async def paginate(
+        self,
+        op: OperationSpec,
+        params: dict,
+        executor: Executor,
+        max_pages: int,
+        page_size: int | None,  # noqa: ARG002 — irrelevant for scroll
+    ) -> dict:
+        pages: list[dict] = []
+        cursor: str | None = params.get("scrollId")
+        current = dict(params)
+
+        while len(pages) < max_pages:
+            if cursor is not None:
+                current["scrollId"] = cursor
+            page = await executor(op, current)
+            pages.append(page if isinstance(page, dict) else {})
+
+            info = (page.get("pageInfo") if isinstance(page, dict) else None) or {}
+            next_cursor = info.get("scrollId")
+            has_more = bool(info.get("hasMoreData"))
+            if not has_more or not next_cursor:
+                cursor = None
+                break
+            cursor = next_cursor
+        else:
+            # Loop exited because we hit max_pages with more available.
+            pass
+
+        next_cursor_obj = {"scrollId": cursor} if cursor else None
+        return stitch(pages, style="scroll", next_cursor=next_cursor_obj)
