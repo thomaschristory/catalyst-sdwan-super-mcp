@@ -10,12 +10,14 @@ Two responsibilities:
 
 from __future__ import annotations
 
+from typing import Literal
+
 _LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 def decide_bind(
     host: str,
-    auth_type: str,
+    auth_type: Literal["none", "bearer"],
     insecure_ok: bool,
 ) -> tuple[str, list[str]]:
     """Decide the effective bind host given the configured auth and override.
