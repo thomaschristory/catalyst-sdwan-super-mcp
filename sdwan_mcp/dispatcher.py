@@ -11,15 +11,19 @@ Handles:
 
 from __future__ import annotations
 
+import asyncio
+import random
 import re
 from typing import Any, TypeAlias
 
 import httpx
 
 from .auth import VManageAuth
-from .config import PaginationConfig
+from .config import PaginationConfig, RetryConfig
 from .loader import OperationSpec, SpecIndex
 from .pagination import OffsetPaginator, Paginator, ScrollPaginator
+
+_MUTATING_METHODS = frozenset({"post", "put", "delete", "patch"})
 
 _RESERVED_PAGINATION_KEYS = ("_pagination", "_max_pages", "_page_size")
 
@@ -43,11 +47,13 @@ class Dispatcher:
         verify_ssl: bool = False,
         timeout: float = 30.0,
         pagination: PaginationConfig | None = None,
+        retry: RetryConfig | None = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._auth = auth
         self._index: SpecIndex | None = None
         self._pagination_cfg = pagination or PaginationConfig()
+        self._retry_cfg = retry or RetryConfig()
 
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -210,12 +216,13 @@ class Dispatcher:
         }
 
         try:
-            response = await self._client.request(
+            response = await self._send_with_retry(
                 method=op.method.upper(),
                 url=url,
                 params=query_params or None,
                 json=body_params if body_params else None,
                 headers=headers,
+                retryable=self._is_retryable(op.method),
             )
         except httpx.RequestError as e:
             return {"error": True, "message": f"Request failed: {e}"}
@@ -233,6 +240,65 @@ class Dispatcher:
             }
 
         return _safe_json(response)
+
+    # ------------------------------------------------------------------
+    # Transport-level retry
+    # ------------------------------------------------------------------
+
+    def _is_retryable(self, method: str) -> bool:
+        if method.lower() in _MUTATING_METHODS:
+            return self._retry_cfg.retry_mutating
+        return True
+
+    async def _send_with_retry(
+        self,
+        *,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None,
+        json: dict[str, Any] | None,
+        headers: dict[str, str],
+        retryable: bool,
+    ) -> httpx.Response:
+        cfg = self._retry_cfg
+        attempts = max(1, cfg.max_attempts) if retryable else 1
+        last_response: httpx.Response | None = None
+
+        for attempt in range(attempts):
+            try:
+                response = await self._client.request(
+                    method=method,
+                    url=url,
+                    params=params,
+                    json=json,
+                    headers=headers,
+                )
+            except httpx.RequestError:
+                if attempt + 1 >= attempts:
+                    raise
+                await self._sleep_backoff(attempt)
+                continue
+
+            if response.status_code in cfg.statuses and attempt + 1 < attempts:
+                last_response = response
+                await self._sleep_backoff(attempt)
+                continue
+
+            return response
+
+        # Loop exits only on exhausted status-code retries (transport errors raise).
+        assert last_response is not None
+        return last_response
+
+    async def _sleep_backoff(self, attempt: int) -> None:
+        cfg = self._retry_cfg
+        if cfg.backoff_base <= 0:
+            return
+        raw = min(cfg.backoff_cap, cfg.backoff_base * (2**attempt))
+        # Equal jitter: half fixed, half random in [0, half].
+        half = raw / 2
+        delay = half + random.uniform(0, half)
+        await asyncio.sleep(delay)
 
 
 # ---------------------------------------------------------------------------

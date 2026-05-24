@@ -7,6 +7,13 @@ vmanage:
   username: "${VMANAGE_USERNAME}"
   password: "${VMANAGE_PASSWORD}"
   use_jwt: true            # 20.15+ supports the modern JWT endpoint; set false to force session
+  timeout: 30.0            # per-request httpx timeout (seconds)
+  retries:
+    max_attempts: 3        # total attempts incl. first try; 1 disables retries
+    statuses: [502, 503, 504]
+    backoff_base: 0.5      # seconds; first backoff is base * 2**0 with jitter
+    backoff_cap: 8.0       # upper bound on a single backoff
+    retry_mutating: false  # default: only GET is retried (POST/PUT/DELETE/PATCH may not be idempotent)
 
 sdwan:
   specs_dir: ./specs

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Configurable per-request timeout (`vmanage.timeout`, default 30s) and
+  transient-failure retry policy (`vmanage.retries`) on the httpx client.
+  Retries 502 / 503 / 504 and `httpx.RequestError` (timeouts, connection
+  resets) with exponential backoff + equal jitter, capped. Mutating verbs
+  (POST/PUT/DELETE/PATCH) are not retried by default. (#9)
 - Response pagination for bulk endpoints. Auto-follows scroll and offset
   endpoint families up to `sdwan.pagination.max_pages` (default 5), then
   surfaces a resumable cursor under `pagination.next_cursor`. Per-call
