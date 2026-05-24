@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from sdwan_mcp.loader import OperationSpec, ParameterSpec
-from sdwan_mcp.pagination import OffsetPaginator, ScrollPaginator, _first_list_key, stitch
+from sdwan_mcp.pagination import (
+    OffsetPaginator,
+    ScrollPaginator,
+    _first_list_key,
+    _offset_size_param_name,
+    stitch,
+)
 
 
 def test_first_list_key_returns_data_when_present():
@@ -156,6 +162,51 @@ async def test_scroll_response_missing_pageInfo_returns_single_page():
     assert result["data"] == [1, 2, 3]
     assert result["pagination"]["pages_fetched"] == 1
     assert result["pagination"]["truncated"] is False
+
+
+def _op_with_query_param(name: str) -> OperationSpec:
+    return OperationSpec(
+        operation_id="x",
+        action_name="x",
+        summary="",
+        method="get",
+        path="/x",
+        tag="t",
+        parameters=[ParameterSpec(name=name, location="query")],
+        has_body=False,
+        pagination="offset",
+    )
+
+
+def test_offset_size_param_name_prefers_page_size():
+    op = OperationSpec(
+        operation_id="x", action_name="x", summary="", method="get", path="/x", tag="t",
+        parameters=[
+            ParameterSpec(name="pageSize", location="query"),
+            ParameterSpec(name="count", location="query"),
+        ],
+        has_body=False,
+        pagination="offset",
+    )
+    assert _offset_size_param_name(op) == "pageSize"
+
+
+def test_offset_size_param_name_falls_back_to_count():
+    assert _offset_size_param_name(_op_with_query_param("count")) == "count"
+
+
+def test_offset_size_param_name_falls_back_to_limit():
+    assert _offset_size_param_name(_op_with_query_param("limit")) == "limit"
+
+
+def test_offset_size_param_name_default_when_none_declared():
+    op = OperationSpec(
+        operation_id="x", action_name="x", summary="", method="get", path="/x", tag="t",
+        parameters=[],
+        has_body=False,
+        pagination="offset",
+    )
+    assert _offset_size_param_name(op) == "pageSize"
 
 
 def _offset_op() -> OperationSpec:

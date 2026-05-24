@@ -196,8 +196,8 @@ class OffsetPaginator:
 
         while len(pages) < max_pages:
             current["page"] = page_num
-            if page_size is not None:
-                current[size_key] = page_size
+            if effective_size is not None:
+                current[size_key] = effective_size
             page = await executor(op, current)
             pages.append(page if isinstance(page, dict) else {})
 
