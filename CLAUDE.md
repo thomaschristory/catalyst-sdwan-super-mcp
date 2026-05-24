@@ -141,7 +141,7 @@ catalyst-sdwan-super-mcp/
     config.py                 config.yaml loader + ${ENV} interpolation
     auth.py                   JWT + session login, refresh, logout
     loader.py                 spec loading, adaptive splitting (section/sub-tag/path), RO/RW filter, action-name derivation, indexing
-    dispatcher.py             httpx client, param routing, retry on session expiry
+    dispatcher.py             httpx client, param routing, retry on session expiry + transient HTTP failures
     tools.py                  dynamic MCP tool registration
     diff.py                   version diff utility
   tests/                      pytest suite (test_loader, test_dispatcher, test_diff, test_config)
@@ -445,6 +445,4 @@ Tracked as GitHub issues — see <https://github.com/thomaschristory/catalyst-sd
 
 - Auto-fetch specs from DevNet (`fetch_specs.py` — see issue with recommended approach)
 - Auth middleware for HTTP transports (protect exposed SSE/streamable-http endpoints)
-- Response pagination handling for bulk endpoints
-- Retry / timeout config on httpx client
 - Live integration test workflow against the DevNet sandbox
