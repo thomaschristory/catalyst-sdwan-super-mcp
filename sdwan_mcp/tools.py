@@ -37,7 +37,7 @@ def _format_param(p: ParameterSpec) -> str:
 
 _PAGINATION_HINT = (
     "Pagination: paginated actions auto-stitch up to N pages and return "
-    '{data, pagination: {...}}. Override per call with _max_pages, _page_size, '
+    "{data, pagination: {...}}. Override per call with _max_pages, _page_size, "
     'or _pagination: "off".'
 )
 

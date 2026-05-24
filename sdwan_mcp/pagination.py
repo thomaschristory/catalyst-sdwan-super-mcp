@@ -92,11 +92,7 @@ def stitch(pages: list[dict], style: str, next_cursor: dict | None) -> dict:
     # Preserve page-1 root fields, but strip the per-page list (it's partial)
     # and pageInfo (folded into `pagination`). Stitched list is always exposed
     # under "data" for a predictable envelope.
-    out: dict = {
-        k: v
-        for k, v in first.items()
-        if k not in {list_key, "pageInfo", "data"}
-    }
+    out: dict = {k: v for k, v in first.items() if k not in {list_key, "pageInfo", "data"}}
     out["data"] = stitched_items
     out["pagination"] = {
         "style": style,

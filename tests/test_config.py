@@ -50,13 +50,9 @@ def test_load_config_missing_file(tmp_path: Path) -> None:
 
 def test_pagination_defaults(tmp_path):
     from sdwan_mcp.config import load_config
+
     cfg_file = tmp_path / "c.yaml"
-    cfg_file.write_text(
-        "vmanage:\n"
-        "  host: vm.test\n"
-        "sdwan:\n"
-        "  active_version: '20.18'\n"
-    )
+    cfg_file.write_text("vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n")
     cfg = load_config(str(cfg_file))
     assert cfg.sdwan.pagination.enabled is True
     assert cfg.sdwan.pagination.max_pages == 5
@@ -65,6 +61,7 @@ def test_pagination_defaults(tmp_path):
 
 def test_pagination_overrides(tmp_path):
     from sdwan_mcp.config import load_config
+
     cfg_file = tmp_path / "c.yaml"
     cfg_file.write_text(
         "vmanage:\n"

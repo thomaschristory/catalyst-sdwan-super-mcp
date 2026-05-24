@@ -83,15 +83,17 @@ def _scroll_pages(*, with_more: list[bool], cursors: list[str]):
     assert len(with_more) == len(cursors)
     out = []
     for i, (more, cursor) in enumerate(zip(with_more, cursors, strict=True)):
-        out.append({
-            "data": [{"i": i, "n": 0}, {"i": i, "n": 1}],
-            "pageInfo": {
-                "scrollId": cursor,
-                "hasMoreData": more,
-                "count": 2,
-                "totalCount": 10,
-            },
-        })
+        out.append(
+            {
+                "data": [{"i": i, "n": 0}, {"i": i, "n": 1}],
+                "pageInfo": {
+                    "scrollId": cursor,
+                    "hasMoreData": more,
+                    "count": 2,
+                    "totalCount": 10,
+                },
+            }
+        )
     return out
 
 
@@ -108,8 +110,10 @@ async def test_scroll_full_drain():
         _scroll_op(), {}, executor, max_pages=5, page_size=None
     )
     assert result["data"] == [
-        {"i": 0, "n": 0}, {"i": 0, "n": 1},
-        {"i": 1, "n": 0}, {"i": 1, "n": 1},
+        {"i": 0, "n": 0},
+        {"i": 0, "n": 1},
+        {"i": 1, "n": 0},
+        {"i": 1, "n": 1},
     ]
     assert result["pagination"]["truncated"] is False
     assert result["pagination"]["next_cursor"] is None
@@ -186,7 +190,12 @@ def _op_with_query_param(name: str) -> OperationSpec:
 
 def test_offset_size_param_name_prefers_page_size():
     op = OperationSpec(
-        operation_id="x", action_name="x", summary="", method="get", path="/x", tag="t",
+        operation_id="x",
+        action_name="x",
+        summary="",
+        method="get",
+        path="/x",
+        tag="t",
         parameters=[
             ParameterSpec(name="pageSize", location="query"),
             ParameterSpec(name="count", location="query"),
@@ -207,7 +216,12 @@ def test_offset_size_param_name_falls_back_to_limit():
 
 def test_offset_size_param_name_default_when_none_declared():
     op = OperationSpec(
-        operation_id="x", action_name="x", summary="", method="get", path="/x", tag="t",
+        operation_id="x",
+        action_name="x",
+        summary="",
+        method="get",
+        path="/x",
+        tag="t",
         parameters=[],
         has_body=False,
         pagination="offset",
@@ -279,9 +293,7 @@ async def test_offset_page_size_override_is_sent_each_call():
         seen.append(dict(params))
         return pages[len(seen) - 1]
 
-    await OffsetPaginator().paginate(
-        _offset_op(), {}, executor, max_pages=5, page_size=2
-    )
+    await OffsetPaginator().paginate(_offset_op(), {}, executor, max_pages=5, page_size=2)
     assert all(c.get("pageSize") == 2 for c in seen)
 
 
@@ -360,8 +372,12 @@ def _paginated_spec_dir(tmp_path):
 def _make_dispatcher(specs_dir, *, pagination):
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
-        host="vm.test", port=8443, username="a", password="b",
-        verify_ssl=False, use_jwt=True,
+        host="vm.test",
+        port=8443,
+        username="a",
+        password="b",
+        verify_ssl=False,
+        use_jwt=True,
     )
     auth._jwt_token = "fake"
     auth._xsrf_token = "fake"
@@ -384,16 +400,34 @@ async def test_dispatcher_scroll_full_drain(tmp_path):
 
     with respx.mock(assert_all_called=True) as router:
         route = router.get("https://vm.test:8443/dataservice/alarms")
-        route.mock(side_effect=[
-            httpx.Response(200, json={
-                "data": [{"i": 1}],
-                "pageInfo": {"scrollId": "c1", "hasMoreData": True, "count": 1, "totalCount": 2},
-            }),
-            httpx.Response(200, json={
-                "data": [{"i": 2}],
-                "pageInfo": {"scrollId": "c2", "hasMoreData": False, "count": 1, "totalCount": 2},
-            }),
-        ])
+        route.mock(
+            side_effect=[
+                httpx.Response(
+                    200,
+                    json={
+                        "data": [{"i": 1}],
+                        "pageInfo": {
+                            "scrollId": "c1",
+                            "hasMoreData": True,
+                            "count": 1,
+                            "totalCount": 2,
+                        },
+                    },
+                ),
+                httpx.Response(
+                    200,
+                    json={
+                        "data": [{"i": 2}],
+                        "pageInfo": {
+                            "scrollId": "c2",
+                            "hasMoreData": False,
+                            "count": 1,
+                            "totalCount": 2,
+                        },
+                    },
+                ),
+            ]
+        )
 
         result = await d.call(action, {})
 
@@ -431,10 +465,13 @@ async def test_dispatcher_opt_out_returns_raw_first_page(tmp_path):
 
     with respx.mock(assert_all_called=True) as router:
         router.get("https://vm.test:8443/dataservice/alarms").mock(
-            return_value=httpx.Response(200, json={
-                "data": [{"i": 1}],
-                "pageInfo": {"scrollId": "c1", "hasMoreData": True},
-            })
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [{"i": 1}],
+                    "pageInfo": {"scrollId": "c1", "hasMoreData": True},
+                },
+            )
         )
         result = await d.call(action, {"_pagination": "off"})
 
@@ -450,10 +487,13 @@ async def test_dispatcher_disabled_globally(tmp_path):
 
     with respx.mock(assert_all_called=True) as router:
         router.get("https://vm.test:8443/dataservice/alarms").mock(
-            return_value=httpx.Response(200, json={
-                "data": [{"i": 1}],
-                "pageInfo": {"scrollId": "c1", "hasMoreData": True},
-            })
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [{"i": 1}],
+                    "pageInfo": {"scrollId": "c1", "hasMoreData": True},
+                },
+            )
         )
         result = await d.call(action, {})
 
@@ -481,10 +521,15 @@ async def test_dispatcher_user_supplied_cursor_resumes(tmp_path):
 
     with respx.mock(assert_all_called=True) as router:
         route = router.get("https://vm.test:8443/dataservice/alarms")
-        route.mock(return_value=httpx.Response(200, json={
-            "data": [{"i": 99}],
-            "pageInfo": {"scrollId": "cN", "hasMoreData": False},
-        }))
+        route.mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [{"i": 99}],
+                    "pageInfo": {"scrollId": "cN", "hasMoreData": False},
+                },
+            )
+        )
         await d.call(action, {"scrollId": "resume-from-here"})
 
     assert route.calls[0].request.url.params["scrollId"] == "resume-from-here"
