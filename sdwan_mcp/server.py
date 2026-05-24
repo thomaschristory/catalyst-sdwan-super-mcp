@@ -20,6 +20,7 @@ from typing import Literal, cast
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from starlette.middleware import Middleware
 
 from . import __version__
 from .auth import VManageAuth
@@ -28,6 +29,7 @@ from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
 from .loader import SpecLoader
 from .tools import register_tools
+from .transport_auth import BearerAuthMiddleware, decide_bind
 
 TransportMode = Literal["stdio", "sse", "streamable-http"]
 _VALID_TRANSPORTS: frozenset[str] = frozenset({"stdio", "sse", "streamable-http"})
@@ -96,6 +98,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "0 disables splitting (one tool per section). Overrides config.yaml (default 150)."
         ),
     )
+    parser.add_argument(
+        "--insecure-allow-public",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow binding to a non-loopback host with transport.auth.type=none. "
+            "Without this flag, such a bind is auto-demoted to 127.0.0.1."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -117,7 +128,7 @@ def run_diff(specs_dir: str, old_version: str, new_version: str) -> None:
 
 async def _connect_and_register(
     args: argparse.Namespace,
-) -> tuple[FastMCP, Dispatcher, TransportMode, str, int]:
+) -> tuple[FastMCP, Dispatcher, TransportMode, str, int, list[Middleware]]:
     """Async pre-flight: load config, log in to vManage, register tools."""
     load_dotenv()
     config = load_config(args.config)
@@ -133,12 +144,34 @@ async def _connect_and_register(
     port = args.port or config.transport.port
     read_write = args.read_write
 
+    insecure_ok: bool = getattr(args, "insecure_allow_public", False)
+
+    middleware_list: list[Middleware] = []
+    if transport_mode != "stdio":
+        effective_host, bind_warnings = decide_bind(
+            host=host,
+            auth_type=config.transport.auth.type,
+            insecure_ok=insecure_ok,
+        )
+        for line in bind_warnings:
+            print(f"[server] WARNING: {line}", file=sys.stderr)
+        host = effective_host
+
+        if config.transport.auth.type == "bearer":
+            middleware_list.append(
+                Middleware(
+                    BearerAuthMiddleware,
+                    expected_token=config.transport.auth.token,
+                )
+            )
+
     print("[server] SD-WAN Super MCP")
     print(f"[server] Spec version : {version}")
     print(f"[server] Mode         : {'READ-WRITE' if read_write else 'READ-ONLY'}")
     print(f"[server] Transport    : {transport_mode}")
-    print(f"[server] Auth         : {'JWT' if config.vmanage.use_jwt else 'Session'}")
+    print(f"[server] vManage Auth : {'JWT' if config.vmanage.use_jwt else 'Session'}")
     if transport_mode != "stdio":
+        print(f"[server] HTTP Auth    : {config.transport.auth.type}")
         print(f"[server] Listening on : {host}:{port}")
     print()
 
@@ -186,18 +219,25 @@ async def _connect_and_register(
     tool_count = register_tools(mcp, index, dispatcher)
     print(f"[server] {tool_count} tools registered — starting {transport_mode} transport\n")
 
-    return mcp, dispatcher, transport_mode, host, port
+    return mcp, dispatcher, transport_mode, host, port, middleware_list
 
 
 def build_and_run(args: argparse.Namespace) -> None:
     """FastMCP.run() owns its own event loop, so async pre-flight runs first."""
-    mcp, dispatcher, transport, host, port = asyncio.run(_connect_and_register(args))
+    mcp, dispatcher, transport, host, port, middleware = asyncio.run(
+        _connect_and_register(args)
+    )
 
     try:
         if transport == "stdio":
             mcp.run()
         else:
-            mcp.run(transport=transport, host=host, port=port)
+            mcp.run(
+                transport=transport,
+                host=host,
+                port=port,
+                middleware=middleware or None,
+            )
     finally:
         try:
             asyncio.run(dispatcher.close())
