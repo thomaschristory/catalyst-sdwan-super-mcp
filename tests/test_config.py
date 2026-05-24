@@ -165,3 +165,16 @@ transport:
     )
     with pytest.raises(ValueError, match="unknown transport.auth.type"):
         load_config(str(cfg))
+
+
+def test_transport_auth_bearer_env_var_unset_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SDWAN_MCP_TOKEN", raising=False)
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        "vmanage:\n  host: vm.test\nsdwan:\n  active_version: '20.18'\n"
+        "transport:\n  auth:\n    type: bearer\n    token: \"${SDWAN_MCP_TOKEN}\"\n"
+    )
+    with pytest.raises(ValueError, match="transport.auth.type=bearer requires"):
+        load_config(str(cfg))

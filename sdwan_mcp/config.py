@@ -8,7 +8,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -59,7 +59,7 @@ class TransportAuthConfig:
     every request, compared in constant time.
     """
 
-    type: str = "none"
+    type: Literal["none", "bearer"] = "none"
     token: str = ""
 
 
@@ -154,20 +154,22 @@ def load_config(path: str = "config.yaml") -> AppConfig:
     )
 
     auth_raw = transport_raw.get("auth", {}) or {}
-    auth_type = str(auth_raw.get("type", "none"))
+    auth_type_str = str(auth_raw.get("type", "none"))
     auth_token = str(auth_raw.get("token", ""))
 
-    if auth_type not in _VALID_AUTH_TYPES:
+    if auth_type_str not in _VALID_AUTH_TYPES:
         raise ValueError(
-            f"unknown transport.auth.type: {auth_type!r}. "
+            f"unknown transport.auth.type: {auth_type_str!r}. "
             f"Choose one of {sorted(_VALID_AUTH_TYPES)}."
         )
+    auth_type: Literal["none", "bearer"] = cast(Literal["none", "bearer"], auth_type_str)
+
     if auth_type == "bearer" and not auth_token:
         raise ValueError(
             "transport.auth.type=bearer requires a non-empty transport.auth.token "
-            "(use ${ENV_VAR} interpolation)."
+            "(set ${SDWAN_MCP_TOKEN} or equivalent, or check the env var is exported)."
         )
-    if auth_type == "none" and auth_token:
+    if auth_type_str == "none" and auth_token:
         raise ValueError(
             "token configured but transport.auth.type=none — "
             "set type: bearer to enable it, or remove the token."
@@ -177,7 +179,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         mode=transport_raw.get("mode", "stdio"),
         host=transport_raw.get("host", "127.0.0.1"),
         port=int(transport_raw.get("port", 8000)),
-        auth=TransportAuthConfig(type=auth_type, token=auth_token),
+        auth=TransportAuthConfig(type=auth_type, token=auth_token),  # type narrowed via cast above
     )
 
     return AppConfig(vmanage=vmanage, sdwan=sdwan, transport=transport)
