@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Response pagination for bulk endpoints. Auto-follows scroll and offset
+  endpoint families up to `sdwan.pagination.max_pages` (default 5), then
+  surfaces a resumable cursor under `pagination.next_cursor`. Per-call
+  overrides via `_max_pages`, `_page_size`, `_pagination` params. (#8)
+
 ## [0.1.0] - 2026-05-23
 
 ### Added

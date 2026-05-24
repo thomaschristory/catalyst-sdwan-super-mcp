@@ -17,7 +17,20 @@ from typing import Any, TypeAlias
 import httpx
 
 from .auth import VManageAuth
+from .config import PaginationConfig
 from .loader import OperationSpec, SpecIndex
+from .pagination import OffsetPaginator, Paginator, ScrollPaginator
+
+_RESERVED_PAGINATION_KEYS = ("_pagination", "_max_pages", "_page_size")
+
+
+def _pick_paginator(style: str | None) -> Paginator | None:
+    if style == "scroll":
+        return ScrollPaginator()
+    if style == "offset":
+        return OffsetPaginator()
+    return None
+
 
 DispatchResult: TypeAlias = dict[str, Any] | list[Any] | str
 
@@ -29,10 +42,12 @@ class Dispatcher:
         auth: VManageAuth,
         verify_ssl: bool = False,
         timeout: float = 30.0,
+        pagination: PaginationConfig | None = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._auth = auth
         self._index: SpecIndex | None = None
+        self._pagination_cfg = pagination or PaginationConfig()
 
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -94,20 +109,54 @@ class Dispatcher:
         self, op: OperationSpec, params: dict[str, Any]
     ) -> DispatchResult:
         """
-        Proactively refresh token if needed, execute request,
-        re-authenticate once on unexpected session expiry.
+        Proactively refresh token, route through a paginator if applicable,
+        and re-authenticate once on unexpected session expiry.
         """
-        # Proactive refresh (JWT only — no-op for session mode)
         await self._auth.ensure_fresh(self._client)
 
-        response = await self._execute(op, params)
+        clean_params, overrides = _strip_reserved(params)
+        opted_out = overrides.get("pagination") == "off"
 
-        # Reactive re-login on unexpected expiry (e.g. server-side invalidation)
+        paginator = (
+            _pick_paginator(op.pagination)
+            if (self._pagination_cfg.enabled and not opted_out)
+            else None
+        )
+
+        if paginator is None:
+            response = await self._execute_one_with_retry(op, clean_params)
+            return response
+
+        max_pages_override = overrides.get("max_pages")
+        max_pages = (
+            int(max_pages_override)
+            if max_pages_override is not None
+            else self._pagination_cfg.max_pages
+        )
+        page_size_override = overrides.get("page_size")
+        page_size = (
+            int(page_size_override)
+            if page_size_override is not None
+            else self._pagination_cfg.page_size
+        )
+
+        return await paginator.paginate(
+            op,
+            clean_params,
+            self._execute_one_with_retry,
+            max_pages=max_pages,
+            page_size=page_size,
+        )
+
+    async def _execute_one_with_retry(
+        self, op: OperationSpec, params: dict[str, Any]
+    ) -> DispatchResult:
+        """One request with the existing session-expiry retry behaviour."""
+        response = await self._execute(op, params)
         if isinstance(response, dict) and response.get("_session_expired"):
             print("[dispatcher] Session expired unexpectedly — re-authenticating")
             await self._auth.login(self._client)
             response = await self._execute(op, params)
-
         return response
 
     async def _execute(self, op: OperationSpec, raw_params: dict[str, Any]) -> DispatchResult:
@@ -201,3 +250,24 @@ def _safe_json(response: httpx.Response) -> DispatchResult:
     if isinstance(data, (dict, list, str)):
         return data
     return {"raw": str(data)}
+
+
+def _strip_reserved(
+    params: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Split reserved underscore keys out of params.
+
+    Returns (clean_params, overrides) where overrides has the un-underscored keys:
+      _pagination -> overrides["pagination"]
+      _max_pages  -> overrides["max_pages"]
+      _page_size  -> overrides["page_size"]
+    """
+    clean: dict[str, Any] = {}
+    overrides: dict[str, Any] = {}
+    for key, value in (params or {}).items():
+        if key in _RESERVED_PAGINATION_KEYS:
+            overrides[key.lstrip("_")] = value
+        else:
+            clean[key] = value
+    return clean, overrides

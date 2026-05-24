@@ -32,10 +32,18 @@ class VManageConfig:
 
 
 @dataclass
+class PaginationConfig:
+    enabled: bool = True
+    max_pages: int = 5
+    page_size: int | None = None
+
+
+@dataclass
 class SDWANConfig:
     specs_dir: str = "./specs"
     active_version: str = "20.18"
     max_actions_per_tool: int = 150  # 0 disables splitting (one tool per section)
+    pagination: PaginationConfig = field(default_factory=PaginationConfig)
 
 
 @dataclass
@@ -109,10 +117,22 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         use_jwt=bool(vmanage_raw.get("use_jwt", True)),
     )
 
+    pagination_raw = sdwan_raw.get("pagination", {}) or {}
+    pagination = PaginationConfig(
+        enabled=bool(pagination_raw.get("enabled", True)),
+        max_pages=int(pagination_raw.get("max_pages", 5)),
+        page_size=(
+            int(pagination_raw["page_size"])
+            if pagination_raw.get("page_size") is not None
+            else None
+        ),
+    )
+
     sdwan = SDWANConfig(
         specs_dir=sdwan_raw.get("specs_dir", "./specs"),
         active_version=str(sdwan_raw.get("active_version", "20.18")),
         max_actions_per_tool=int(sdwan_raw.get("max_actions_per_tool", 150)),
+        pagination=pagination,
     )
 
     transport = TransportConfig(

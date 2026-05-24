@@ -35,8 +35,15 @@ def _format_param(p: ParameterSpec) -> str:
     return f"{p.name}{req}: {p.type}{desc}{default}"
 
 
+_PAGINATION_HINT = (
+    "Pagination: paginated actions auto-stitch up to N pages and return "
+    "{data, pagination: {...}}. Override per call with _max_pages, _page_size, "
+    'or _pagination: "off".'
+)
+
+
 def _build_description(group: ToolGroup) -> str:
-    lines = [group.display_tag, "", "Actions:"]
+    lines = [group.display_tag, "", _PAGINATION_HINT, "", "Actions:"]
 
     for op in group.operations:
         path_params = [p for p in op.parameters if p.location == "path"]
