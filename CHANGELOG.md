@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-25
+
+This release completes the [v0.1.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/1) — four enhancements ship together. Bumped to **0.2.0** rather than 0.1.1 because the auto-fetch and bind-safety changes are minor-version behaviour changes, and the HTTP transport now ships with first-class auth.
+
 ### Added
 - Live ingestion of split-spec vManage versions (>=20.16). If
   `specs/<active_version>/` is missing on startup, the loader fetches
