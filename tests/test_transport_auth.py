@@ -186,7 +186,7 @@ async def test_server_stdio_does_not_install_auth_middleware(tmp_path: Path) -> 
 
 @pytest.mark.asyncio
 async def test_server_http_with_bearer_installs_middleware(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     config_path = _write_min_config(
         tmp_path,
