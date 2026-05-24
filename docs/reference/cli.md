@@ -10,6 +10,11 @@ sdwan-mcp [-h] [--version-info]
           [--diff OLD NEW]
           [--max-actions-per-tool N]
           [--insecure-allow-public]
+
+sdwan-mcp fetch [--config PATH] (--version VERSION | --all-known)
+                [--force] [--no-fragment-cache]
+
+sdwan-mcp list-versions [--config PATH]
 ```
 
 ## Flags
@@ -44,4 +49,34 @@ sdwan-mcp --diff 20.15 20.18
 
 # Smaller, more numerous tools (lower cap → more aggressive splitting)
 sdwan-mcp --max-actions-per-tool 50
+```
+
+## Subcommands
+
+### `fetch`
+
+Download the OpenAPI fragments for a vManage version from
+`developer.cisco.com` and stitch them into `specs/<version>/vmanageapi_<flat>.yaml`.
+Works without vManage credentials. See
+[Spec versions](../guides/spec-versions.md) for how this fits into the
+end-to-end flow.
+
+| Flag | Description |
+|---|---|
+| `--version VERSION` | The spec version to fetch (e.g. `20.19`). |
+| `--all-known` | Fetch every version in the curated KNOWN_VERSIONS list. |
+| `--force` | Re-download even when the YAML already exists locally. |
+| `--no-fragment-cache` | Skip the per-fragment JSON cache at `~/.cache/sdwan-mcp/fragments/`. |
+
+### `list-versions`
+
+Print known spec versions plus on-disk cache status. Useful before adding a
+new version to `config.yaml`.
+
+```text
+20.15  monolith  cached
+20.16  split     cached
+20.18  split     cached
+20.19  split     not cached
+21.1   split     not cached
 ```

@@ -1,0 +1,24 @@
+{
+  "type": "api",
+  "title": "Get Device",
+  "meta": {
+    "info": {"title": "Monitoring - Device", "version": "20.99 - 2099-01-01"},
+    "openapi": "3.1.0",
+    "servers": [{"url": "/dataservice"}]
+  },
+  "spec": {
+    "tags": ["Monitoring - Device"],
+    "operationId": "getDevice",
+    "parameters": [
+      {"name": "deviceId", "in": "path", "required": true, "schema": {"type": "string"}}
+    ],
+    "responses": {
+      "200": {
+        "description": "Success",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Device"}}}
+      }
+    },
+    "method": "get",
+    "path": "/v1/device/{deviceId}"
+  }
+}

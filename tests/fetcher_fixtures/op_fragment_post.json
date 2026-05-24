@@ -1,0 +1,19 @@
+{
+  "type": "api",
+  "title": "Add Device",
+  "meta": {
+    "info": {"title": "Monitoring - Device", "version": "20.99 - 2099-01-01"},
+    "openapi": "3.1.0",
+    "servers": [{"url": "/dataservice"}]
+  },
+  "spec": {
+    "tags": ["Monitoring - Device"],
+    "operationId": "addDevice",
+    "requestBody": {
+      "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Device"}}}
+    },
+    "responses": {"200": {"description": "OK"}},
+    "method": "post",
+    "path": "/v1/device/{deviceId}"
+  }
+}

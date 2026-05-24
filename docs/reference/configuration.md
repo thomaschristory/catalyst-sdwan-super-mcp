@@ -22,8 +22,9 @@ vmanage:
 
 sdwan:
   specs_dir: ./specs                # default: ./specs
-  active_version: "20.18"           # required — must match a folder in specs_dir (20.15, 20.16, 20.18 bundled)
+  active_version: "20.18"           # required — names a folder in specs_dir. Auto-fetched if missing (see auto_fetch).
   max_actions_per_tool: 150         # default: 150. Cap before splitting; 0 disables splitting. See guides/tool-splitting.md
+  auto_fetch: true                  # default: true. If specs/<active_version>/ is missing, fetch from developer.cisco.com on startup.
 
 transport:
   mode: stdio                       # default: stdio. Options: stdio | sse | streamable-http

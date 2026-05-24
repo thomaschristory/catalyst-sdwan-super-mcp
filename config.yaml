@@ -19,6 +19,7 @@ sdwan:
   specs_dir: ./specs
   active_version: "20.18"
   max_actions_per_tool: 150  # adaptive splitter cap; 0 disables splitting (one tool per section)
+  auto_fetch: true           # if specs/<active_version>/ is missing, fetch on startup. Set false for air-gapped.
   pagination:
     enabled: true
     max_pages: 5

@@ -1,0 +1,32 @@
+{
+  "type": "api",
+  "title": "List Devices",
+  "meta": {
+    "id": "/apps/pubhub/media/cisco-catalyst-sd-wan-api-guide-20-99/aaaa1111-1111-1111-1111-111111111111",
+    "info": {
+      "title": "Monitoring - Device",
+      "description": "Device monitoring APIs",
+      "version": "20.99 - 2099-01-01"
+    },
+    "openapi": "3.1.0",
+    "servers": [{"url": "/dataservice"}]
+  },
+  "spec": {
+    "tags": ["Monitoring - Device"],
+    "description": "List all devices.",
+    "operationId": "listDevices",
+    "parameters": [],
+    "responses": {
+      "200": {
+        "description": "Success",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/DeviceList"}
+          }
+        }
+      }
+    },
+    "method": "get",
+    "path": "/v1/device"
+  }
+}
