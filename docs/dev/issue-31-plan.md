@@ -104,7 +104,7 @@ sdwan:
 - DevNet SPA shape changes → discover.py logs every parsed leaf at DEBUG and raises a clear error if zero `apis/` leaves are found. validate.py refuses to write garbage.
 - The pubhub URL prefix moves again → discover.py extracts the prefix from the page (already present in image refs), so a hard-coded prefix is a fallback only.
 - Dangling `examples` refs → validate.py warns rather than failing. If Cisco ever publishes example fragments, we will pick them up by extending the discovery regex to `(apis|models|examples)`.
-- Implicit fetch slowness → 60s overall timeout; clear error message points at `sdwan-mcp fetch`.
+- Implicit fetch slowness → 300s overall wall-clock deadline (`fetch_version_safe(overall_timeout=300.0)`); clear `FetchError` on timeout points at the explicit `sdwan-mcp fetch` subcommand.
 
 ## Out of scope (per issue Non-goals)
 
