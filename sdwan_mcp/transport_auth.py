@@ -49,3 +49,53 @@ def decide_bind(
         "--insecure-allow-public to acknowledge the risk.",
     ]
     return "127.0.0.1", warnings
+
+
+import hmac
+import logging
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
+
+logger = logging.getLogger(__name__)
+
+
+class BearerAuthMiddleware(BaseHTTPMiddleware):
+    """Enforce `Authorization: Bearer <token>` using constant-time comparison.
+
+    On failure, returns a 401 JSON body with `WWW-Authenticate: Bearer`.
+    Never logs the supplied token (not even a prefix — leaks rotation state).
+    """
+
+    def __init__(self, app: ASGIApp, expected_token: str) -> None:
+        super().__init__(app)
+        if not expected_token:
+            raise ValueError("BearerAuthMiddleware requires a non-empty expected_token")
+        self._expected_token = expected_token
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return self._unauthorized(request, "missing or malformed Authorization header")
+
+        if not hmac.compare_digest(token, self._expected_token):
+            return self._unauthorized(request, "invalid token")
+
+        return await call_next(request)
+
+    def _unauthorized(self, request: Request, reason: str) -> Response:
+        client_host = request.client.host if request.client else "unknown"
+        logger.warning(
+            "auth rejected: remote=%s path=%s reason=%s",
+            client_host,
+            request.url.path,
+            reason,
+        )
+        return JSONResponse(
+            {"error": reason},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
