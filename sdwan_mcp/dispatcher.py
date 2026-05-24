@@ -31,6 +31,7 @@ def _pick_paginator(style: str | None) -> Paginator | None:
         return OffsetPaginator()
     return None
 
+
 DispatchResult: TypeAlias = dict[str, Any] | list[Any] | str
 
 
@@ -126,10 +127,18 @@ class Dispatcher:
             response = await self._execute_one_with_retry(op, clean_params)
             return response
 
-        max_pages = int(overrides.get("max_pages") or self._pagination_cfg.max_pages)
-        page_size = overrides.get("page_size")
-        if page_size is None:
-            page_size = self._pagination_cfg.page_size
+        max_pages_override = overrides.get("max_pages")
+        max_pages = (
+            int(max_pages_override)
+            if max_pages_override is not None
+            else self._pagination_cfg.max_pages
+        )
+        page_size_override = overrides.get("page_size")
+        page_size = (
+            int(page_size_override)
+            if page_size_override is not None
+            else self._pagination_cfg.page_size
+        )
 
         return await paginator.paginate(
             op,
@@ -139,7 +148,9 @@ class Dispatcher:
             page_size=page_size,
         )
 
-    async def _execute_one_with_retry(self, op: OperationSpec, params: dict) -> dict:
+    async def _execute_one_with_retry(
+        self, op: OperationSpec, params: dict[str, Any]
+    ) -> DispatchResult:
         """One request with the existing session-expiry retry behaviour."""
         response = await self._execute(op, params)
         if isinstance(response, dict) and response.get("_session_expired"):

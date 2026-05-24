@@ -29,22 +29,22 @@ The response envelope when pagination engaged:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 from .loader import OperationSpec
 
-Executor = Callable[[OperationSpec, dict], Awaitable[dict]]
+Executor = Callable[[OperationSpec, dict[str, Any]], Awaitable[Any]]
 
 
 class Paginator(Protocol):
     async def paginate(
         self,
         op: OperationSpec,
-        params: dict,
+        params: dict[str, Any],
         executor: Executor,
         max_pages: int,
         page_size: int | None,
-    ) -> dict: ...
+    ) -> dict[str, Any]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -52,17 +52,21 @@ class Paginator(Protocol):
 # ---------------------------------------------------------------------------
 
 
-def _first_list_key(page: dict) -> str | None:
+def _first_list_key(page: dict[str, Any]) -> str | None:
     """Return the first top-level key whose value is a list, or None."""
     if not isinstance(page, dict):
         return None
     for key, value in page.items():
         if isinstance(value, list):
-            return key
+            return str(key)
     return None
 
 
-def stitch(pages: list[dict], style: str, next_cursor: dict | None) -> dict:
+def stitch(
+    pages: list[dict[str, Any]],
+    style: str,
+    next_cursor: dict[str, Any] | None,
+) -> dict[str, Any]:
     """
     Concatenate the list-typed top-level field across pages and wrap with
     a pagination block. Other top-level fields from the first page are
@@ -82,7 +86,7 @@ def stitch(pages: list[dict], style: str, next_cursor: dict | None) -> dict:
     first = pages[0] if isinstance(pages[0], dict) else {}
     list_key = _first_list_key(first) or "data"
 
-    stitched_items: list = []
+    stitched_items: list[Any] = []
     for page in pages:
         if isinstance(page, dict):
             items = page.get(list_key)
@@ -92,7 +96,9 @@ def stitch(pages: list[dict], style: str, next_cursor: dict | None) -> dict:
     # Preserve page-1 root fields, but strip the per-page list (it's partial)
     # and pageInfo (folded into `pagination`). Stitched list is always exposed
     # under "data" for a predictable envelope.
-    out: dict = {k: v for k, v in first.items() if k not in {list_key, "pageInfo", "data"}}
+    out: dict[str, Any] = {
+        k: v for k, v in first.items() if k not in {list_key, "pageInfo", "data"}
+    }
     out["data"] = stitched_items
     out["pagination"] = {
         "style": style,
@@ -114,14 +120,15 @@ class ScrollPaginator:
     async def paginate(
         self,
         op: OperationSpec,
-        params: dict,
+        params: dict[str, Any],
         executor: Executor,
         max_pages: int,
-        page_size: int | None,  # ignored — irrelevant for scroll
-    ) -> dict:
-        pages: list[dict] = []
+        page_size: int | None,
+    ) -> dict[str, Any]:
+        del page_size  # irrelevant for scroll
+        pages: list[dict[str, Any]] = []
         cursor: str | None = params.get("scrollId")
-        current = dict(params)
+        current: dict[str, Any] = dict(params)
 
         while len(pages) < max_pages:
             if cursor is not None:
@@ -130,15 +137,12 @@ class ScrollPaginator:
             pages.append(page if isinstance(page, dict) else {})
 
             info = (page.get("pageInfo") if isinstance(page, dict) else None) or {}
-            next_cursor = info.get("scrollId")
+            next_cursor_raw = info.get("scrollId")
             has_more = bool(info.get("hasMoreData"))
-            if not has_more or not next_cursor:
+            if not has_more or not next_cursor_raw:
                 cursor = None
                 break
-            cursor = next_cursor
-        else:
-            # Loop exited because we hit max_pages with more available.
-            pass
+            cursor = str(next_cursor_raw)
 
         next_cursor_obj = {"scrollId": cursor} if cursor else None
         return stitch(pages, style="scroll", next_cursor=next_cursor_obj)
@@ -167,13 +171,13 @@ class OffsetPaginator:
     async def paginate(
         self,
         op: OperationSpec,
-        params: dict,
+        params: dict[str, Any],
         executor: Executor,
         max_pages: int,
         page_size: int | None,
-    ) -> dict:
-        pages: list[dict] = []
-        current = dict(params)
+    ) -> dict[str, Any]:
+        pages: list[dict[str, Any]] = []
+        current: dict[str, Any] = dict(params)
         size_key = _offset_size_param_name(op)
 
         # Resolve the effective page size: explicit override > caller param > None.
@@ -187,8 +191,9 @@ class OffsetPaginator:
                         effective_size = None
                     break
 
-        page_num = int(current.get("page", 1) or 1)
-        next_cursor: dict | None = None
+        raw_page = current.get("page")
+        page_num = int(raw_page) if raw_page is not None else 1
+        next_cursor: dict[str, Any] | None = None
 
         while len(pages) < max_pages:
             current["page"] = page_num
