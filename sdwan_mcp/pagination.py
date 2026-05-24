@@ -146,3 +146,77 @@ class ScrollPaginator:
 
         next_cursor_obj = {"scrollId": cursor} if cursor else None
         return stitch(pages, style="scroll", next_cursor=next_cursor_obj)
+
+
+# ---------------------------------------------------------------------------
+# Offset paginator
+# ---------------------------------------------------------------------------
+
+
+_OFFSET_SIZE_KEYS = ("pageSize", "count", "limit")
+
+
+def _offset_size_param_name(op: OperationSpec) -> str:
+    """Which size-param name does this op use? Defaults to pageSize if none declared."""
+    query_names = {p.name for p in op.parameters if p.location == "query"}
+    for key in _OFFSET_SIZE_KEYS:
+        if key in query_names:
+            return key
+    return "pageSize"
+
+
+class OffsetPaginator:
+    """Classic page/<size> pagination. Stops on a short page or an empty page."""
+
+    async def paginate(
+        self,
+        op: OperationSpec,
+        params: dict,
+        executor: Executor,
+        max_pages: int,
+        page_size: int | None,
+    ) -> dict:
+        pages: list[dict] = []
+        current = dict(params)
+        size_key = _offset_size_param_name(op)
+
+        # Resolve the effective page size: explicit override > caller param > None.
+        effective_size: int | None = page_size
+        if effective_size is None:
+            for key in _OFFSET_SIZE_KEYS:
+                if key in current and current[key] is not None:
+                    try:
+                        effective_size = int(current[key])
+                    except (TypeError, ValueError):
+                        effective_size = None
+                    break
+
+        page_num = int(current.get("page", 1) or 1)
+        next_cursor: dict | None = None
+
+        while len(pages) < max_pages:
+            current["page"] = page_num
+            if page_size is not None:
+                current[size_key] = page_size
+            page = await executor(op, current)
+            pages.append(page if isinstance(page, dict) else {})
+
+            list_key = _first_list_key(page) if isinstance(page, dict) else None
+            items = page.get(list_key) if (isinstance(page, dict) and list_key) else []
+
+            # Stop conditions.
+            if not items:
+                next_cursor = None
+                break
+            if effective_size is not None and len(items) < effective_size:
+                next_cursor = None
+                break
+
+            page_num += 1
+        else:
+            # Loop exited because we hit max_pages with potentially more available.
+            next_cursor = {"page": page_num}
+            if effective_size is not None:
+                next_cursor[size_key] = effective_size
+
+        return stitch(pages, style="offset", next_cursor=next_cursor)

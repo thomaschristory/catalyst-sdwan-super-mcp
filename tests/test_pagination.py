@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sdwan_mcp.loader import OperationSpec, ParameterSpec
-from sdwan_mcp.pagination import ScrollPaginator, _first_list_key, stitch
+from sdwan_mcp.pagination import OffsetPaginator, ScrollPaginator, _first_list_key, stitch
 
 
 def test_first_list_key_returns_data_when_present():
@@ -155,4 +155,103 @@ async def test_scroll_response_missing_pageInfo_returns_single_page():
     )
     assert result["data"] == [1, 2, 3]
     assert result["pagination"]["pages_fetched"] == 1
+    assert result["pagination"]["truncated"] is False
+
+
+def _offset_op() -> OperationSpec:
+    return OperationSpec(
+        operation_id="listDevices",
+        action_name="list_devices",
+        summary="",
+        method="get",
+        path="/devices",
+        tag="Configuration - Devices",
+        parameters=[
+            ParameterSpec(name="page", location="query"),
+            ParameterSpec(name="pageSize", location="query"),
+        ],
+        has_body=False,
+        pagination="offset",
+    )
+
+
+@pytest.mark.asyncio
+async def test_offset_full_drain_stops_on_short_page():
+    pages = [
+        {"data": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+        {"data": [11, 12, 13]},
+    ]
+    seen: list[dict] = []
+
+    async def executor(op, params):
+        seen.append(dict(params))
+        return pages[len(seen) - 1]
+
+    result = await OffsetPaginator().paginate(
+        _offset_op(), {"pageSize": 10}, executor, max_pages=5, page_size=None
+    )
+    assert result["data"] == list(range(1, 14))
+    assert result["pagination"]["truncated"] is False
+    assert result["pagination"]["next_cursor"] is None
+    assert [c["page"] for c in seen] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_offset_truncated_at_max_pages():
+    pages = [{"data": list(range(10))} for _ in range(5)]
+    seen: list[dict] = []
+
+    async def executor(op, params):
+        seen.append(dict(params))
+        return pages[len(seen) - 1]
+
+    result = await OffsetPaginator().paginate(
+        _offset_op(), {"pageSize": 10}, executor, max_pages=2, page_size=None
+    )
+    assert result["pagination"]["truncated"] is True
+    assert result["pagination"]["next_cursor"] == {"page": 3, "pageSize": 10}
+    assert [c["page"] for c in seen] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_offset_page_size_override_is_sent_each_call():
+    pages = [{"data": [1, 2]}, {"data": []}]
+    seen: list[dict] = []
+
+    async def executor(op, params):
+        seen.append(dict(params))
+        return pages[len(seen) - 1]
+
+    await OffsetPaginator().paginate(
+        _offset_op(), {}, executor, max_pages=5, page_size=2
+    )
+    assert all(c.get("pageSize") == 2 for c in seen)
+
+
+@pytest.mark.asyncio
+async def test_offset_stops_on_empty_page():
+    pages = [{"data": [1, 2]}, {"data": []}]
+
+    async def executor(op, params):
+        return pages.pop(0)
+
+    result = await OffsetPaginator().paginate(
+        _offset_op(), {}, executor, max_pages=5, page_size=None
+    )
+    assert result["data"] == [1, 2]
+    assert result["pagination"]["pages_fetched"] == 2
+    assert result["pagination"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_offset_resumes_from_user_supplied_page():
+    pages = [{"data": [50, 51, 52]}]
+
+    async def executor(op, params):
+        return pages.pop(0)
+
+    result = await OffsetPaginator().paginate(
+        _offset_op(), {"page": 5, "pageSize": 100}, executor, max_pages=5, page_size=None
+    )
+    # Short page (3 < 100) → stop without cursor.
     assert result["pagination"]["truncated"] is False
