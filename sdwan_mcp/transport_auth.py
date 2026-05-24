@@ -10,7 +10,16 @@ Two responsibilities:
 
 from __future__ import annotations
 
+import hmac
+import logging
 from typing import Literal
+
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
+
+logger = logging.getLogger(__name__)
 
 _LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
 
@@ -51,17 +60,6 @@ def decide_bind(
     return "127.0.0.1", warnings
 
 
-import hmac
-import logging
-
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-from starlette.types import ASGIApp
-
-logger = logging.getLogger(__name__)
-
-
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Enforce `Authorization: Bearer <token>` using constant-time comparison.
 
@@ -75,7 +73,9 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             raise ValueError("BearerAuthMiddleware requires a non-empty expected_token")
         self._expected_token = expected_token
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         header = request.headers.get("authorization", "")
         scheme, _, token = header.partition(" ")
         if scheme.lower() != "bearer" or not token:
