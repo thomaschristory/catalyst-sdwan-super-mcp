@@ -46,11 +46,29 @@ class SDWANConfig:
     pagination: PaginationConfig = field(default_factory=PaginationConfig)
 
 
+_VALID_AUTH_TYPES: frozenset[str] = frozenset({"none", "bearer"})
+
+
+@dataclass
+class TransportAuthConfig:
+    """Authentication for the HTTP transports (SSE, streamable-http).
+
+    type='none' means no auth — only safe on loopback or behind a trusted
+    authenticating reverse proxy (see --insecure-allow-public in server.py).
+    type='bearer' enforces an `Authorization: Bearer <token>` header on
+    every request, compared in constant time.
+    """
+
+    type: str = "none"
+    token: str = ""
+
+
 @dataclass
 class TransportConfig:
     mode: str = "stdio"  # stdio | sse | streamable-http
     host: str = "127.0.0.1"
     port: int = 8000
+    auth: TransportAuthConfig = field(default_factory=TransportAuthConfig)
 
 
 @dataclass
@@ -135,10 +153,31 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         pagination=pagination,
     )
 
+    auth_raw = transport_raw.get("auth", {}) or {}
+    auth_type = str(auth_raw.get("type", "none"))
+    auth_token = str(auth_raw.get("token", ""))
+
+    if auth_type not in _VALID_AUTH_TYPES:
+        raise ValueError(
+            f"unknown transport.auth.type: {auth_type!r}. "
+            f"Choose one of {sorted(_VALID_AUTH_TYPES)}."
+        )
+    if auth_type == "bearer" and not auth_token:
+        raise ValueError(
+            "transport.auth.type=bearer requires a non-empty transport.auth.token "
+            "(use ${ENV_VAR} interpolation)."
+        )
+    if auth_type == "none" and auth_token:
+        raise ValueError(
+            "token configured but transport.auth.type=none — "
+            "set type: bearer to enable it, or remove the token."
+        )
+
     transport = TransportConfig(
         mode=transport_raw.get("mode", "stdio"),
         host=transport_raw.get("host", "127.0.0.1"),
         port=int(transport_raw.get("port", 8000)),
+        auth=TransportAuthConfig(type=auth_type, token=auth_token),
     )
 
     return AppConfig(vmanage=vmanage, sdwan=sdwan, transport=transport)
