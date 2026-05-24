@@ -439,6 +439,30 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 
 ---
 
+## Issue / milestone triage
+
+There is always exactly one **current milestone** — the open one with the
+lowest version-sorted title (e.g. `v0.2.1` while `v0.3.0` is still on the
+backlog). **Every new issue you open must be attached to the current
+milestone unless the user explicitly names another one.**
+
+Practical rule when creating an issue with `gh`:
+
+```bash
+# Find the current milestone (lowest open version):
+current=$(gh api repos/thomaschristory/catalyst-sdwan-super-mcp/milestones \
+  --jq '[.[] | select(.state=="open")] | sort_by(.title) | .[0].title')
+
+# Then:
+gh issue create --milestone "$current" --title "..." --body "..."
+```
+
+When a milestone is released and closed, open the next-patch milestone
+immediately (e.g. close `v0.2.0` → open `v0.2.1`) so the "current"
+target is never ambiguous. At release time, decide whether to ship the
+closing milestone as a patch or bump to the next minor based on the
+CHANGELOG's `Changed (behavior)` section — non-empty implies a minor.
+
 ## Not yet implemented / future
 
 Tracked as GitHub issues — see <https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues>.
