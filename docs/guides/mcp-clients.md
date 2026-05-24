@@ -12,7 +12,17 @@ request must include:
 Authorization: Bearer <your-token>
 ```
 
-How you set this depends on the client:
+!!! danger "Always run bearer mode over HTTPS"
+    Bearer tokens travel in plaintext inside the `Authorization` header.
+    Serving them over `http://` exposes the token to anyone on the network
+    path (Wi-Fi neighbours, ISP, transparent proxies) — equivalent to no
+    auth on a shared network. **Always front a bearer-mode endpoint with
+    HTTPS** via a reverse proxy (Caddy auto-issues a cert with one line of
+    config; nginx, Traefik, or a corporate gateway work equally well). The
+    URLs in the examples below use `http://` only for local-loopback
+    illustration.
+
+How you set the header depends on the client:
 
 - **Claude Desktop** — add a `headers` block under the SSE/streamable-http
   server entry in `claude_desktop_config.json`:
@@ -21,7 +31,7 @@ How you set this depends on the client:
   {
     "mcpServers": {
       "sdwan": {
-        "url": "http://your-host:8000/mcp",
+        "url": "https://your-host/mcp",
         "headers": {
           "Authorization": "Bearer ${SDWAN_MCP_TOKEN}"
         }
@@ -36,7 +46,7 @@ How you set this depends on the client:
   from fastmcp import Client
 
   async with Client(
-      "http://your-host:8000/mcp",
+      "https://your-host/mcp",
       headers={"Authorization": f"Bearer {os.environ['SDWAN_MCP_TOKEN']}"},
   ) as client:
       ...
@@ -45,6 +55,25 @@ How you set this depends on the client:
 - **Cline / Continue / other MCP clients** — check the client's docs for
   custom HTTP headers. The header name is `Authorization`, the value is
   `Bearer <token>`.
+
+### Generating a token
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+The loader rejects tokens shorter than 8 characters outright and warns on
+anything under 16. Aim for ≥32 characters of URL-safe base64.
+
+### Rate-limiting and brute force
+
+The middleware uses constant-time comparison so individual rejections leak
+no timing information, and rejection logs are throttled (at most 10
+`WARNING` lines per minute followed by a "suppressed N more" rollup) so a
+brute-force flood cannot fill the disk. There is **no built-in rate limit
+or lockout** on rejection rate itself — front the endpoint with a reverse
+proxy that does (nginx `limit_req`, Caddy `rate_limit`, or fail2ban) if
+the network surface is hostile.
 
 ## Claude Desktop (stdio)
 

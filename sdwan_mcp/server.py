@@ -144,14 +144,12 @@ async def _connect_and_register(
     port = args.port or config.transport.port
     read_write = args.read_write
 
-    insecure_ok: bool = getattr(args, "insecure_allow_public", False)
-
     middleware_list: list[Middleware] = []
     if transport_mode != "stdio":
         effective_host, bind_warnings = decide_bind(
             host=host,
             auth_type=config.transport.auth.type,
-            insecure_ok=insecure_ok,
+            insecure_ok=args.insecure_allow_public,
         )
         for line in bind_warnings:
             print(f"[server] WARNING: {line}", file=sys.stderr)

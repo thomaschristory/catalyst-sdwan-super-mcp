@@ -19,7 +19,9 @@ from sdwan_mcp import server
 from sdwan_mcp.transport_auth import BearerAuthMiddleware, decide_bind
 
 
-@pytest.mark.parametrize("host", ["127.0.0.1", "::1", "localhost"])
+@pytest.mark.parametrize(
+    "host", ["127.0.0.1", "127.0.0.2", "127.5.6.7", "::1", "[::1]", "localhost"]
+)
 def test_decide_bind_loopback_never_demoted(host: str) -> None:
     effective, warnings = decide_bind(host=host, auth_type="none", insecure_ok=False)
     assert effective == host
@@ -73,7 +75,10 @@ def test_bearer_middleware_rejects_missing_header() -> None:
     client = TestClient(_make_app("good-token"))
     resp = client.get("/x")
     assert resp.status_code == 401
-    assert resp.headers["WWW-Authenticate"] == "Bearer"
+    challenge = resp.headers["WWW-Authenticate"]
+    assert challenge.startswith("Bearer ")
+    assert 'realm="catalyst-sdwan"' in challenge
+    assert 'error="invalid_request"' in challenge
     body = json.loads(resp.text)
     assert "missing or malformed" in body["error"].lower()
 
@@ -98,8 +103,24 @@ def test_bearer_middleware_rejects_wrong_token() -> None:
     client = TestClient(_make_app("good-token"))
     resp = client.get("/x", headers={"Authorization": "Bearer wrong-token"})
     assert resp.status_code == 401
+    challenge = resp.headers["WWW-Authenticate"]
+    assert 'error="invalid_token"' in challenge
     body = json.loads(resp.text)
     assert "invalid token" in body["error"].lower()
+
+
+def test_bearer_middleware_accepts_multiple_spaces() -> None:
+    """RFC 7235 allows 1*SP between scheme and credentials."""
+    client = TestClient(_make_app("good-token"))
+    resp = client.get("/x", headers={"Authorization": "Bearer   good-token"})
+    assert resp.status_code == 200
+    assert resp.text == "ok"
+
+
+def test_bearer_middleware_lowercase_scheme_accepted() -> None:
+    client = TestClient(_make_app("good-token"))
+    resp = client.get("/x", headers={"Authorization": "bearer good-token"})
+    assert resp.status_code == 200
 
 
 def test_bearer_middleware_uses_constant_time_compare() -> None:
@@ -263,3 +284,33 @@ async def test_server_http_public_no_auth_with_override_keeps_bind(
 
     assert host == "0.0.0.0"
     assert middleware == []
+
+
+# ---------------------------------------------------------------------------
+# FastMCP wiring smoke test
+#
+# Catches the regression where a future FastMCP release renames the `middleware`
+# kwarg on `FastMCP.http_app()` / `FastMCP.run()`. Without this test, such a
+# rename would silently drop the middleware and boot a happy unauthenticated
+# server.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("transport", ["streamable-http", "sse"])
+def test_fastmcp_http_app_actually_installs_bearer_middleware(transport: str) -> None:
+    """FastMCP.http_app(middleware=[...]) must reject unauth requests with 401."""
+    from fastmcp import FastMCP
+
+    mcp = FastMCP(name="auth-wiring-test")
+    app = mcp.http_app(
+        middleware=[Middleware(BearerAuthMiddleware, expected_token="probe-token-xyz")],
+        transport=transport,
+    )
+
+    with TestClient(app) as client:
+        # Unauthenticated → must be rejected by our middleware.
+        resp = client.get("/mcp/")
+        assert resp.status_code == 401, (
+            f"middleware did not run on {transport}: got {resp.status_code} {resp.text!r}"
+        )
+        assert resp.headers["WWW-Authenticate"].startswith("Bearer ")
