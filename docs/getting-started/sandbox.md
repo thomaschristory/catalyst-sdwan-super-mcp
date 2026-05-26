@@ -17,7 +17,7 @@ Reservation page: <https://developer.cisco.com/sdwan/sandbox/> — check the lis
 
 ## Config
 
-The repo's `config.yaml` ships pointing at this host with `active_version: "20.18"`. Just set credentials in `.env`:
+The repo's `sdwan-mcp.yaml` ships pointing at this host with `active_version: "20.18"`. Just set credentials in `.env`:
 
 ```bash
 cp .env.example .env

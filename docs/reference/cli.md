@@ -21,7 +21,7 @@ sdwan-mcp list-versions [--config PATH]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--config PATH` | `./config.yaml` | Alternate config file. |
+| `--config PATH` | `./sdwan-mcp.yaml` | Alternate config file. |
 | `--transport` | from config (`stdio`) | One of `stdio`, `sse`, `streamable-http`. |
 | `--host` | from config (`127.0.0.1`) | Bind address for HTTP transports. |
 | `--port` | from config (`8000`) | Bind port for HTTP transports. |
@@ -71,7 +71,7 @@ end-to-end flow.
 ### `list-versions`
 
 Print known spec versions plus on-disk cache status. Useful before adding a
-new version to `config.yaml`.
+new version to `sdwan-mcp.yaml`.
 
 ```text
 20.15  monolith  cached

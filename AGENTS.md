@@ -17,4 +17,4 @@ auth, project layout, data flow, CLI, Docker, and key decisions.
 - Specs go in `specs/{version}/` and may be `.yaml`, `.yml`, or `.json`. Filenames
   inside a version folder are arbitrary; they're merged in name order.
 - New vManage version = drop a new folder + change `sdwan.active_version` in
-  `config.yaml`. No code changes.
+  `sdwan-mcp.yaml`. No code changes.

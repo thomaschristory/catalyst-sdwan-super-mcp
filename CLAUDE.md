@@ -126,7 +126,7 @@ automatically and only set `X-XSRF-TOKEN` ourselves — passing a manual `Cookie
 in addition produces duplicate cookies and vManage rejects the second copy. This bit
 me during the first sandbox test.
 
-Set `use_jwt: false` in config.yaml to force session mode. Logout is called on shutdown
+Set `use_jwt: false` in sdwan-mcp.yaml to force session mode. Logout is called on shutdown
 to cleanly release the server-side session.
 
 ---
@@ -138,7 +138,7 @@ catalyst-sdwan-super-mcp/
   sdwan_mcp/                  source package
     __init__.py               version
     server.py                 entrypoint, CLI, async pre-flight
-    config.py                 config.yaml loader + ${ENV} interpolation
+    config.py                 sdwan-mcp.yaml loader + ${ENV} interpolation
     auth.py                   JWT + session login, refresh, logout
     loader.py                 spec loading, adaptive splitting (section/sub-tag/path), RO/RW filter, action-name derivation, indexing
     dispatcher.py             httpx client, param routing, retry on session expiry + transient HTTP failures
@@ -166,7 +166,7 @@ catalyst-sdwan-super-mcp/
   mkdocs.yml
   Dockerfile                  multi-stage, uv-based
   docker-compose.yml          SSE on :8000 by default
-  config.yaml                 default config — points at DevNet sandbox
+  sdwan-mcp.yaml                 default config — points at DevNet sandbox
   .env.example
   CHANGELOG.md
   LICENSE                     Apache-2.0
@@ -182,7 +182,7 @@ in name order.
 ## Config file
 
 ```yaml
-# config.yaml
+# sdwan-mcp.yaml
 vmanage:
   host: sandbox-sdwan-2.cisco.com   # DevNet sandbox by default
   port: 443
@@ -218,7 +218,7 @@ sdwan-mcp --read-write                             # enable mutations
 sdwan-mcp --version 20.15                          # override spec version
 sdwan-mcp --max-actions-per-tool 50                # smaller, more numerous tools
 sdwan-mcp --diff 20.15 20.18                       # diff two versions and exit
-sdwan-mcp --config /path/to/config.yaml            # custom config file
+sdwan-mcp --config /path/to/sdwan-mcp.yaml            # custom config file
 ```
 
 The `catalyst-sdwan-super-mcp` script name is also registered if you prefer the long form.
@@ -260,7 +260,7 @@ upgrade vManage versions without rebuilding.
 
 ```
 server.py (async pre-flight)
-  → config.py     reads config.yaml, interpolates env vars
+  → config.py     reads sdwan-mcp.yaml, interpolates env vars
   → loader.py     loads all *.{yaml,yml,json} from specs/{version}/
                   merges paths + schemas
                   filters by RO/RW flag

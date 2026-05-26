@@ -48,7 +48,7 @@ for the analysis.
    uv run sdwan-mcp --diff 20.15 {NEW_VERSION}
    ```
 
-4. Update `config.yaml`:
+4. Update `sdwan-mcp.yaml`:
 
    ```yaml
    sdwan:

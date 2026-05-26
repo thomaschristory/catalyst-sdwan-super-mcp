@@ -12,7 +12,7 @@ specs/
     vmanageapi_2018.yaml
 ```
 
-The folder name is the version key. `config.yaml`'s `sdwan.active_version` picks which one to load.
+The folder name is the version key. `sdwan-mcp.yaml`'s `sdwan.active_version` picks which one to load.
 
 ## Adding a new version (auto-fetch)
 
@@ -56,7 +56,7 @@ OpenAPI document), download manually:
     uv run sdwan-mcp --diff 20.15 20.18
     ```
 
-4. Update `config.yaml`:
+4. Update `sdwan-mcp.yaml`:
 
     ```yaml
     sdwan:

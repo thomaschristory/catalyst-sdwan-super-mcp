@@ -1,6 +1,6 @@
 # Configuration
 
-The server reads `./config.yaml` by default (override with `--config`). Environment variables are interpolated at load time using `${VAR_NAME}` syntax.
+The server reads `./sdwan-mcp.yaml` by default (override with `--config`). Environment variables are interpolated at load time using `${VAR_NAME}` syntax.
 
 ## Full schema
 
@@ -85,8 +85,8 @@ on every request.
 
 | Variable | Used by |
 |---|---|
-| `VMANAGE_USERNAME` | `${VMANAGE_USERNAME}` in `config.yaml` |
-| `VMANAGE_PASSWORD` | `${VMANAGE_PASSWORD}` in `config.yaml` |
+| `VMANAGE_USERNAME` | `${VMANAGE_USERNAME}` in `sdwan-mcp.yaml` |
+| `VMANAGE_PASSWORD` | `${VMANAGE_PASSWORD}` in `sdwan-mcp.yaml` |
 
 `.env` is auto-loaded if present (via `python-dotenv`).
 
@@ -115,4 +115,4 @@ layer that re-authenticates once on top of any transport-level retries.
 
 ## Precedence
 
-CLI flags override `config.yaml`. Anything missing from both falls back to the dataclass defaults shown above.
+CLI flags override `sdwan-mcp.yaml`. Anything missing from both falls back to the dataclass defaults shown above.

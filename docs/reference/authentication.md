@@ -54,7 +54,7 @@ vmanage:
   use_jwt: true     # default
 ```
 
-The shipped `config.yaml` ships `use_jwt: true` (matches the bundled `20.18` default). If you point at an older vManage that doesn't expose the JWT endpoint, set `use_jwt: false` to force the session flow.
+The shipped `sdwan-mcp.yaml` ships `use_jwt: true` (matches the bundled `20.18` default). If you point at an older vManage that doesn't expose the JWT endpoint, set `use_jwt: false` to force the session flow.
 
 ## Logout
 
