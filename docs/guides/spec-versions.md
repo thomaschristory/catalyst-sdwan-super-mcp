@@ -16,7 +16,7 @@ The folder name is the version key. `sdwan-mcp.yaml`'s `sdwan.active_version` pi
 
 ## Adding a new version (auto-fetch)
 
-Starting in 0.1.1, just bump `active_version` and start the server. If
+Starting in 0.2.0, just bump `active_version` and start the server. If
 `specs/<version>/` is empty or missing, the loader fetches and stitches the
 spec from [developer.cisco.com](https://developer.cisco.com/docs/sdwan/) before
 registering tools. The next start reuses the cached YAML.

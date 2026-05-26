@@ -17,7 +17,7 @@ pipx install catalyst-sdwan-super-mcp
 pip install catalyst-sdwan-super-mcp
 ```
 
-The PyPI install ships the package only — the OpenAPI specs live in this repo under `specs/`. Either clone the repo for the bundled specs, or point `sdwan.specs_dir` in `sdwan-mcp.yaml` at your own copy.
+The PyPI install ships the package only. No specs are bundled — on first startup the loader auto-fetches the spec for `sdwan.active_version` (>= 20.16) from `developer.cisco.com` into `sdwan.specs_dir`. Override this behaviour with `sdwan.auto_fetch: false` (air-gapped) or pre-warm with `sdwan-mcp fetch --version <V>`. See [Spec versions](../guides/spec-versions.md) for details.
 
 ## From source (for development or to get the bundled specs)
 
@@ -69,9 +69,16 @@ ls specs/
 # 20.15  20.16  20.18  README.md
 ```
 
-`20.18` is the default and matches the public DevNet sandbox. See `specs/README.md` for the source URLs and how to add another version.
+`20.18` is the default and matches the public DevNet sandbox.
 
-Tracking and auto-downloading newer versions is [issue #1](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/1).
+For other versions (>= 20.16) the loader can fetch on demand — bump `sdwan.active_version` and run the server, or pre-warm explicitly:
+
+```bash
+sdwan-mcp list-versions                  # what's known and what's cached locally
+sdwan-mcp fetch --version 20.19          # download + stitch into specs/20.19/
+```
+
+See [Spec versions](../guides/spec-versions.md) for the full flow, and `specs/README.md` for the source URLs of the bundled versions.
 
 ## Verify
 

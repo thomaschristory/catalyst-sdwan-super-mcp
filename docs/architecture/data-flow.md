@@ -4,14 +4,23 @@
 
 ```
 1. server.py reads CLI flags + sdwan-mcp.yaml + .env
-2. SpecLoader loads specs/{version}/*.{yaml,yml,json}, merges,
+2. If specs/{active_version}/ is empty and sdwan.auto_fetch is true,
+   fetcher/ pulls OpenAPI fragments from developer.cisco.com and writes
+   specs/{version}/vmanageapi_<flat>.yaml (>= 20.16 only)
+3. SpecLoader loads specs/{version}/*.{yaml,yml,json}, merges,
    drops mutations if RO, adaptively splits ops into ToolGroups
    (section -> sub-tag -> URL path, see guides/tool-splitting.md),
    derives a stable action_name per op, builds an action_name index
-3. VManageAuth.login() — JWT or session
-4. Dispatcher attaches the index and a single httpx.AsyncClient
-5. tools.register_tools(...) registers one MCP tool per group
-6. mcp.run() — transport listens, dispatcher answers tool calls
+4. Bind-safety check: if transport is sse/streamable-http with auth=none
+   and host is non-loopback, demote to 127.0.0.1 unless
+   --insecure-allow-public was passed
+5. VManageAuth.login() — JWT or session
+6. Dispatcher attaches the index and a single httpx.AsyncClient
+   (timeout + retry policy from vmanage.timeout / vmanage.retries)
+7. tools.register_tools(...) registers one MCP tool per group
+8. For HTTP transports: transport_auth middleware wraps the ASGI app
+   if transport.auth.type == "bearer"
+9. mcp.run() — transport listens, dispatcher answers tool calls
 ```
 
 ## Tool call

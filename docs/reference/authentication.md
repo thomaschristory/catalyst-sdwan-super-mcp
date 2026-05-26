@@ -1,5 +1,7 @@
 # Authentication
 
+This page covers authentication **between `sdwan-mcp` and vManage**. For authentication between an MCP client and an HTTP-transport `sdwan-mcp` server (the bearer-token middleware on `sse` and `streamable-http`), see [Configuration → `transport.auth`](configuration.md#transportauth-http-transport-authentication) and the [MCP clients guide](../guides/mcp-clients.md).
+
 vManage uses **credential-based authentication**, not bearer API tokens. Two flows are supported.
 
 ## JWT (default, vManage 20.18.1+)
