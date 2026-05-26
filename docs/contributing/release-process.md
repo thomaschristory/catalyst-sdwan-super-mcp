@@ -20,6 +20,6 @@
 
 6. The `release` workflow runs on the tag. It builds the sdist + wheel, attaches them to a GitHub release, and **publishes to PyPI via [trusted publishing](https://docs.pypi.org/trusted-publishers/)** — OIDC, no API token in the repo.
 
-7. The same workflow runs the **milestone auto-rollover** step: it closes the milestone whose title matches the released tag and opens the next patch milestone (e.g. close `v0.2.1` → open `v0.2.2`). Re-target any leftover open issues at the new milestone.
+7. A companion workflow (`milestone-rollover.yml`) fires on the same tag push and performs the **milestone auto-rollover** step: it closes the milestone whose title matches the released tag and opens the next patch milestone (e.g. close `v0.2.1` → open `v0.2.2`). Re-target any leftover open issues at the new milestone.
 
 The `docs` workflow deploys mkdocs-material to GitHub Pages on every push to `main` (and via `workflow_dispatch`).
