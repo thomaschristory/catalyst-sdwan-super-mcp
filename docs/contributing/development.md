@@ -20,6 +20,7 @@ uv run mkdocs serve                 # docs live preview at http://localhost:8000
 ## What CI enforces
 
 - `ruff check` (lint) and `ruff format --check`
+- `mypy --strict` on `sdwan_mcp/`
 - `pytest` on Python 3.11, 3.12, 3.13, both Linux and macOS
 - Docker build + `--help` smoke test
 - `mkdocs build --strict` on every PR that touches docs
@@ -29,11 +30,14 @@ uv run mkdocs serve                 # docs live preview at http://localhost:8000
 ```
 sdwan_mcp/          source package
   __init__.py       version
-  server.py         entrypoint, CLI
+  server.py         entrypoint, CLI, subcommands (fetch, list-versions)
   config.py         YAML + env interpolation
   loader.py         spec loading, grouping, indexing
-  auth.py           JWT + session login
-  dispatcher.py     httpx client, param routing
+  fetcher/          live spec ingestion from developer.cisco.com (>= 20.16)
+  auth.py           JWT + session login to vManage
+  transport_auth.py bearer-token middleware for SSE / streamable-HTTP
+  dispatcher.py     httpx client, retry + timeout, param routing
+  pagination.py     scroll + offset auto-follow
   tools.py          dynamic MCP tool registration
   diff.py           version diff utility
 tests/              pytest suite
