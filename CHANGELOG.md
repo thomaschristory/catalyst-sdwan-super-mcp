@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `milestone-rollover.yml` now triggers on `push: tags` instead of
+  `release: published`. The previous trigger was unreachable because
+  `release.yml`'s `gh release create` step runs under the default
+  `GITHUB_TOKEN`, and GitHub deliberately blocks workflow-token-created
+  events from chaining further workflows. (#37)
+
 ## [0.2.1] - 2026-05-26
 
 This release closes the [v0.2.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/2) — a config-file rename plus a docs sync. Shipping as a patch despite the `Changed (behavior)` entry because the rename is a trivial one-line user migration.

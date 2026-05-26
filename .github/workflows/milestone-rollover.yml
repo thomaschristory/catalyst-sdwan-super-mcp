@@ -1,8 +1,14 @@
 name: Milestone rollover
 
+# Triggers on tag push rather than `release: published` because
+# release.yml creates the GitHub release with the default GITHUB_TOKEN,
+# and GitHub deliberately blocks workflow-token-created events from
+# chaining further workflows. The rollover only needs the tag name,
+# not the release object — so this trigger is sufficient and reliable.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions:
   issues: write
@@ -15,7 +21,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
