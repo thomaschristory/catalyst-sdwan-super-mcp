@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-26
+
+This release closes the [v0.2.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/2) — a config-file rename plus a docs sync. Shipping as a patch despite the `Changed (behavior)` entry because the rename is a trivial one-line user migration.
+
 ### Changed (behavior — read this if you upgrade)
 - The default config filename is now `sdwan-mcp.yaml` (was `config.yaml`).
   `config.yaml` is too generic and collided with other tools in the same
   repo. Rename your config file or pass `--config config.yaml` explicitly.
   The Docker image and `docker-compose.yml` mounts use the new name too.
   (#35)
+
+### Documentation
+- Sync README and mkdocs site to the v0.2.0 feature surface (auto-fetch,
+  HTTP-transport bearer auth, bind-safety demotion, pagination, retry/timeout,
+  new modules). Clarify release-process: milestone auto-rollover lives in a
+  companion workflow, not `release.yml`. (#33)
 
 ## [0.2.0] - 2026-05-25
 
