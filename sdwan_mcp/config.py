@@ -1,5 +1,5 @@
 """
-config.py — loads config.yaml and resolves ${ENV_VAR} interpolation.
+config.py — loads sdwan-mcp.yaml and resolves ${ENV_VAR} interpolation.
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def _interpolate_dict(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def load_config(path: str = "config.yaml") -> AppConfig:
+def load_config(path: str = "sdwan-mcp.yaml") -> AppConfig:
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")

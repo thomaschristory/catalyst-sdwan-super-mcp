@@ -8,7 +8,7 @@ Usage:
   sdwan-mcp --read-write                             # enable mutations
   sdwan-mcp --version 20.18                          # override spec version
   sdwan-mcp --diff 20.15 20.18                       # diff two versions and exit
-  sdwan-mcp --config path/to/config.yaml             # custom config file
+  sdwan-mcp --config path/to/sdwan-mcp.yaml          # custom config file
 
   sdwan-mcp fetch --version 20.19                    # download + stitch spec
   sdwan-mcp fetch --all-known                        # pre-warm every known version
@@ -63,15 +63,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--version-info", action="version", version=f"sdwan-mcp {__version__}")
     parser.add_argument(
         "--config",
-        default="config.yaml",
+        default="sdwan-mcp.yaml",
         metavar="PATH",
-        help="Path to config.yaml (default: ./config.yaml)",
+        help="Path to the config file (default: ./sdwan-mcp.yaml)",
     )
     parser.add_argument(
         "--transport",
         choices=["stdio", "sse", "streamable-http"],
         default=None,
-        help="Transport mode — overrides config.yaml (default: stdio)",
+        help="Transport mode — overrides the config file (default: stdio)",
     )
     parser.add_argument(
         "--host",
@@ -94,7 +94,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--version",
         default=None,
         metavar="VERSION",
-        help="Spec version to load, e.g. '20.18' — overrides config.yaml",
+        help="Spec version to load, e.g. '20.18' — overrides the config file",
     )
     parser.add_argument(
         "--diff",
@@ -109,7 +109,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help=(
             "Adaptive splitter cap: any tool with more than N actions is split further. "
-            "0 disables splitting (one tool per section). Overrides config.yaml (default 150)."
+            "0 disables splitting (one tool per section). Overrides the config file (default 150)."
         ),
     )
     parser.add_argument(
@@ -140,9 +140,9 @@ def _build_fetch_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--config",
-        default="config.yaml",
+        default="sdwan-mcp.yaml",
         metavar="PATH",
-        help="Path to config.yaml (default: ./config.yaml). Used only to "
+        help="Path to the config file (default: ./sdwan-mcp.yaml). Used only to "
         "resolve sdwan.specs_dir; vManage credentials are not required.",
     )
     p.add_argument(
@@ -175,9 +175,9 @@ def _build_list_versions_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--config",
-        default="config.yaml",
+        default="sdwan-mcp.yaml",
         metavar="PATH",
-        help="Path to config.yaml (default: ./config.yaml).",
+        help="Path to the config file (default: ./sdwan-mcp.yaml).",
     )
     return p
 

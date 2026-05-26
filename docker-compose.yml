@@ -9,7 +9,7 @@ services:
       - SDWAN_MCP_TOKEN=${SDWAN_MCP_TOKEN}
     volumes:
       - ./specs:/app/specs:ro
-      - ./config.yaml:/app/config.yaml:ro
+      - ./sdwan-mcp.yaml:/app/sdwan-mcp.yaml:ro
     # Default for compose: SSE transport on 8000 (network-accessible)
     command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
     ports:
@@ -23,7 +23,7 @@ services:
   #   env_file: .env
   #   volumes:
   #     - ./specs:/app/specs:ro
-  #     - ./config.yaml:/app/config.yaml:ro
+  #     - ./sdwan-mcp.yaml:/app/sdwan-mcp.yaml:ro
   #   command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8001", "--read-write"]
   #   ports:
   #     - "8001:8001"

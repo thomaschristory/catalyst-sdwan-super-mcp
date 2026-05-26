@@ -17,7 +17,7 @@ pipx install catalyst-sdwan-super-mcp
 pip install catalyst-sdwan-super-mcp
 ```
 
-The PyPI install ships the package only — the OpenAPI specs live in this repo under `specs/`. Either clone the repo for the bundled specs, or point `sdwan.specs_dir` in `config.yaml` at your own copy.
+The PyPI install ships the package only — the OpenAPI specs live in this repo under `specs/`. Either clone the repo for the bundled specs, or point `sdwan.specs_dir` in `sdwan-mcp.yaml` at your own copy.
 
 ## From source (for development or to get the bundled specs)
 
@@ -45,7 +45,7 @@ The `.env` file is loaded automatically at startup. Never commit it.
 
 ## Configure your vManage
 
-Edit `config.yaml`:
+Edit `sdwan-mcp.yaml`:
 
 ```yaml
 vmanage:

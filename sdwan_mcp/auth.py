@@ -14,7 +14,7 @@ Supports two modes:
     All requests: Cookie: JSESSIONID=...
                   X-XSRF-TOKEN: {xsrfToken}
 
-Set use_jwt: false in config.yaml to force session mode.
+Set use_jwt: false in sdwan-mcp.yaml to force session mode.
 """
 
 from __future__ import annotations
@@ -157,7 +157,7 @@ class VManageAuth:
         except (KeyError, ValueError) as e:
             raise RuntimeError(
                 f"JWT login: unexpected response format — are you on vManage 20.18.1+?\n"
-                f"Try setting use_jwt: false in config.yaml for older versions.\n"
+                f"Try setting use_jwt: false in sdwan-mcp.yaml for older versions.\n"
                 f"Response: {response.text}"
             ) from e
 

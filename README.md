@@ -30,7 +30,7 @@ EOF
 uv run sdwan-mcp        # stdio, read-only, adaptive tool splitting (default)
 ```
 
-The shipped `config.yaml` points at `sandbox-sdwan-2.cisco.com` and ships specs for vManage 20.15, 20.16, and 20.18 in `specs/`. 20.18 is the default. You don't need a vManage of your own to try it.
+The shipped `sdwan-mcp.yaml` points at `sandbox-sdwan-2.cisco.com` and ships specs for vManage 20.15, 20.16, and 20.18 in `specs/`. 20.18 is the default. You don't need a vManage of your own to try it.
 
 **Supported vManage versions: 20.15+.** Older releases are out of scope — see [issue #13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13).
 
@@ -41,7 +41,7 @@ uv tool install catalyst-sdwan-super-mcp
 sdwan-mcp --help
 ```
 
-The PyPI package ships the server only — point `sdwan.specs_dir` in your `config.yaml` at a directory containing the OpenAPI specs (the `specs/` folder from this repo works as-is). Full instructions: [docs/getting-started/install.md](docs/getting-started/install.md).
+The PyPI package ships the server only — point `sdwan.specs_dir` in your `sdwan-mcp.yaml` at a directory containing the OpenAPI specs (the `specs/` folder from this repo works as-is). Full instructions: [docs/getting-started/install.md](docs/getting-started/install.md).
 
 ---
 

@@ -17,7 +17,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY --from=builder /app /app
-COPY config.yaml ./
+COPY sdwan-mcp.yaml ./
 
 ENV PATH="/app/.venv/bin:$PATH"
 

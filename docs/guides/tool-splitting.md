@@ -62,7 +62,7 @@ If a bucket is still over the threshold at path depth 5 — or if a `_misc` buck
 
 Two ways to react:
 
-- **Raise the threshold.** Set `max_actions_per_tool` higher in `config.yaml` (or on the CLI). Reasonable if your MCP client can handle larger descriptions and you'd rather have one big tool than an oddly-shaped split.
+- **Raise the threshold.** Set `max_actions_per_tool` higher in `sdwan-mcp.yaml` (or on the CLI). Reasonable if your MCP client can handle larger descriptions and you'd rather have one big tool than an oddly-shaped split.
 - **Accept the oversized tool.** It still works — the warning is informational. The dispatcher doesn't care about the size.
 
 On the bundled specs with the default 150 threshold, **no tools trigger this warning**.

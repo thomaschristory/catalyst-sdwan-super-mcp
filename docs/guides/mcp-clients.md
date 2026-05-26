@@ -139,5 +139,5 @@ uv run sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
 ```
 
 When exposing the server over the network, configure bearer token auth via
-`transport.auth.type: bearer` in `config.yaml` and set the header on the client
+`transport.auth.type: bearer` in `sdwan-mcp.yaml` and set the header on the client
 as shown in the [Setting the bearer token](#setting-the-bearer-token) section above.

@@ -31,7 +31,7 @@
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | Load `config.yaml`, interpolate `${VAR}`, validate. |
+| `config.py` | Load `sdwan-mcp.yaml`, interpolate `${VAR}`, validate. |
 | `loader.py` | Read OpenAPI spec files, [adaptively split](../guides/tool-splitting.md) operations into tools (section → sub-tag → URL path), filter by RO/RW, derive stable `action_name` per op, build a flat `action_name → op` index. |
 | `auth.py` | Two login flows (JWT and legacy session), header injection, proactive refresh. |
 | `dispatcher.py` | One `httpx.AsyncClient` per server. Looks ops up by `action_name`, routes params (path / query / body), executes, retries once on session expiry. |

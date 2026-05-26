@@ -3,7 +3,7 @@
 ## Startup
 
 ```
-1. server.py reads CLI flags + config.yaml + .env
+1. server.py reads CLI flags + sdwan-mcp.yaml + .env
 2. SpecLoader loads specs/{version}/*.{yaml,yml,json}, merges,
    drops mutations if RO, adaptively splits ops into ToolGroups
    (section -> sub-tag -> URL path, see guides/tool-splitting.md),

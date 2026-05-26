@@ -13,7 +13,7 @@ def test_load_config_interpolates_env(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("VMANAGE_USERNAME", "alice")
     monkeypatch.setenv("VMANAGE_PASSWORD", "s3cret")
 
-    cfg = tmp_path / "config.yaml"
+    cfg = tmp_path / "sdwan-mcp.yaml"
     cfg.write_text(
         """\
 vmanage:
