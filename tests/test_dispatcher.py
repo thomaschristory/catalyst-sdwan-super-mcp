@@ -51,6 +51,35 @@ async def test_dispatcher_substitutes_path_params(dispatcher: Dispatcher) -> Non
 
 
 @pytest.mark.asyncio
+async def test_dispatcher_encodes_path_params(dispatcher: Dispatcher) -> None:
+    """Path-param values are percent-encoded so separators can't reshape the
+    request path (#55 L3). A traversal payload stays a single, escaped segment."""
+    with respx.mock(assert_all_called=True) as router:
+        route = router.get("https://vm.test:8443/dataservice/devices/a%2F..%2Fadmin/info").mock(
+            return_value=httpx.Response(200, json={"ok": True})
+        )
+        await dispatcher.call("get_device_details_info", {"deviceId": "a/../admin"})
+
+    # raw_path preserves wire encoding (.path decodes it). The '/' is escaped to
+    # %2F, so the value stays one segment — no traversal to a sibling path. The
+    # respx route above only matched because the request was sent encoded.
+    raw = route.calls.last.request.url.raw_path
+    assert b"%2F" in raw
+    assert b"/devices/a/../admin/" not in raw
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_leaves_ordinary_ids_untouched(dispatcher: Dispatcher) -> None:
+    """Unreserved chars (e.g. a dotted device id) pass through unencoded."""
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
+            return_value=httpx.Response(200, json={"ok": True})
+        )
+        result = await dispatcher.call("get_device_details_info", {"deviceId": "10.0.0.1"})
+    assert result == {"ok": True}
+
+
+@pytest.mark.asyncio
 async def test_dispatcher_routes_query_params(dispatcher: Dispatcher) -> None:
     with respx.mock(assert_all_called=True) as router:
         route = router.get("https://vm.test:8443/dataservice/devices").mock(

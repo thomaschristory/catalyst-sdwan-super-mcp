@@ -23,7 +23,7 @@ This is what makes the server work when installed via `uv tool install` and laun
 vmanage:
   host: sandbox-sdwan-2.cisco.com   # required
   port: 443                         # default: 8443
-  verify_ssl: false                 # default: false
+  verify_ssl: false                 # default: true — keep true in production; the self-signed sandbox opts out with false
   username: "${VMANAGE_USERNAME}"   # required (use env var)
   password: "${VMANAGE_PASSWORD}"   # required (use env var)
   use_jwt: true                     # default: true. Set to false to force JSESSIONID + XSRF fallback.
