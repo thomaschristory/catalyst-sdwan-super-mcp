@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-11
+
+Closes the [v0.4.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/6) (#55, #56, #57). Bumped to a minor (not the v0.3.2 patch tag) because TLS verification is now **on by default** — a behavior change for anyone relying on the old insecure default.
+
+### Security
+- **TLS certificate verification is now enabled by default** (`verify_ssl: true`).
+  Previously it defaulted to `false`, and vManage credentials are POSTed to
+  `/j_security_check` over that channel — an unverified connection let an
+  on-path attacker capture the operator's username/password and the issued
+  JWT/JSESSIONID. The self-signed Cisco DevNet sandbox is the documented opt-out:
+  set `VMANAGE_VERIFY_SSL=false` (or `verify_ssl: false`); the shipped
+  `sdwan-mcp.yaml` does this. The server now prints a loud stderr `WARNING`
+  whenever verification is disabled. (#55, H1)
+- All GitHub Actions are pinned to full commit SHAs (was mutable major-version
+  tags, and a mutable `release/v1` **branch** on the OIDC-privileged PyPI publish
+  step). (#55, M1)
+- MCP-client-supplied path parameters are percent-encoded (`quote(safe='')`)
+  before substitution into the vManage request URL, so a value containing `/`,
+  `..`, `?`, or `#` can no longer reshape the request path to a sibling
+  endpoint. (#55, L3)
+- Dockerfile hardening: the `uv` builder image is pinned to an immutable
+  version + digest (was `:latest`); the install is fail-closed (dropped the
+  `|| uv sync --no-dev` fallback and `2>/dev/null`, and `COPY uv.lock`
+  explicitly); the runtime container runs as a non-root user. (#55, L1/L2/L4/L5)
+- `.env.example` ships credential placeholders instead of the literal public
+  sandbox password, so secret scanners don't flag it. (#55, I2)
+
+### Changed (behavior — read this if you upgrade)
+- `verify_ssl` now defaults to **`true`** (see Security above). If you point at
+  a vManage with a self-signed or otherwise unverifiable certificate, you must
+  now explicitly set `VMANAGE_VERIFY_SSL=false` / `verify_ssl: false`, otherwise
+  login will fail with a TLS error instead of silently connecting insecurely.
+- The `fastmcp` dependency range is tightened to `>=3,<4` (was `>=2.0`). The
+  server targets and is tested against fastmcp 3.x; this prevents a reinstall
+  from silently landing on now-untested 2.x or an unreviewed future 4.x. (#57)
+
+### Fixed
+- The first tool call of a fresh session no longer intermittently fails with
+  `Event loop is closed`. Async pre-flight (which creates the httpx client and
+  logs in) ran in its own event loop, then the server opened a second loop to
+  serve — leaving the client bound to the already-closed pre-flight loop. Both
+  phases now run on a single loop via `mcp.run_async()`. (#56)
+- Statistics-database queries that return an opaque HTTP 500 (`REST0001`) are
+  now annotated with an actionable `hint` (the stats DB may be disabled/empty,
+  or the query needs a bounded time window) instead of a bare error. The hint
+  wording is tiered so a non-`REST0001` 500 on a `/statistics` path is hedged
+  rather than over-claiming a DB outage. Real-time endpoints are unaffected. (#56)
+
 ## [0.3.1] - 2026-06-11
 
 Closes the [v0.3.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/5). Patch release — the only change is a startup-crash fix, no behavior change.
