@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- vManage credentials are now validated immediately after config load, before
+  the spec is loaded or auto-fetched. Previously the check lived in
+  `auth.login()` at the end of startup, so a missing `VMANAGE_USERNAME` /
+  `VMANAGE_PASSWORD` only surfaced after the loader had already done (and
+  possibly network-fetched) all its work. (#47)
+
 ## [0.2.2] - 2026-06-11
 
 Patch release closing the [v0.2.2 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/3) — two bug fixes, no behaviour changes. The remaining live-test work (#10) rolls forward to v0.2.3.
