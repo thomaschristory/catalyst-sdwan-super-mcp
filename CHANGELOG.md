@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-11
+
+Patch release closing the [v0.2.2 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/3) — two bug fixes, no behaviour changes. The remaining live-test work (#10) rolls forward to v0.2.3.
+
 ### Fixed
 - `.env` is now discovered from the current working directory (and next to
   `--config`) instead of from the package's install location. python-dotenv's
