@@ -8,14 +8,17 @@ Tool shape:
     action:    str — one of the derived action_names in this group
     params:    dict — keys/values vary by action, documented in description
 
-NOTE: The default-arg capture pattern (_group=group, _dispatcher=dispatcher,
-_valid=valid_actions) is intentional. Python closures capture variables by
-reference, so without it every tool handler would point to the last group
-in the loop. The default arg forces value capture at definition time.
+NOTE: Each handler is built by a factory (_make_tool_handler) so it closes over
+its own group's values in a fresh scope. This avoids the classic loop-variable
+aliasing bug WITHOUT leaking internal objects (dispatcher, valid_actions) into
+the handler signature — fastmcp 3.x introspects the signature to build the tool
+schema and cannot generate a pydantic schema for arbitrary types like Dispatcher
+(see #52).
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
@@ -86,6 +89,34 @@ def register_tools(mcp: FastMCP, index: SpecIndex, dispatcher: Dispatcher) -> in
     return count
 
 
+def _make_tool_handler(
+    tool_name: str,
+    valid_actions: frozenset[str],
+    dispatcher: Dispatcher,
+) -> Callable[[str, dict[str, Any] | None], Awaitable[DispatchResult]]:
+    """Build a handler that closes over this group's values in a fresh scope.
+
+    The factory call gives each handler its own binding of tool_name/
+    valid_actions/dispatcher, so the only parameters fastmcp sees on the
+    signature are `action` and `params` (see module docstring / #52)."""
+
+    async def tool_handler(
+        action: str,
+        params: dict[str, Any] | None = None,
+    ) -> DispatchResult:
+        if action not in valid_actions:
+            return {
+                "error": True,
+                "message": (
+                    f"Unknown action '{action}' for tool '{tool_name}'. "
+                    f"Valid actions: {sorted(valid_actions)}"
+                ),
+            }
+        return await dispatcher.call(action, params or {})
+
+    return tool_handler
+
+
 def _register_group_tool(
     mcp: FastMCP,
     group: ToolGroup,
@@ -95,23 +126,7 @@ def _register_group_tool(
     description = _build_description(group)
     valid_actions = frozenset(op.action_name for op in group.operations)
 
-    # See module docstring: default args force value capture at definition time.
-    async def tool_handler(
-        action: str,
-        params: dict[str, Any] | None = None,
-        _valid: frozenset[str] = valid_actions,
-        _name: str = tool_name,
-        _dispatcher: Dispatcher = dispatcher,
-    ) -> DispatchResult:
-        if action not in _valid:
-            return {
-                "error": True,
-                "message": (
-                    f"Unknown action '{action}' for tool '{_name}'. Valid actions: {sorted(_valid)}"
-                ),
-            }
-        return await _dispatcher.call(action, params or {})
-
+    tool_handler = _make_tool_handler(tool_name, valid_actions, dispatcher)
     tool_handler.__name__ = tool_name
     tool_handler.__doc__ = description
 
