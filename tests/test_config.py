@@ -55,6 +55,20 @@ def test_load_config_missing_file_returns_defaults(
     assert cfg.transport.mode == "stdio"
 
 
+def test_verify_ssl_defaults_to_true(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Secure by default (#55 H1): TLS verification must be ON unless opted out."""
+    monkeypatch.delenv("VMANAGE_VERIFY_SSL", raising=False)
+    cfg = load_config(str(tmp_path / "nope.yaml"))
+    assert cfg.vmanage.verify_ssl is True
+
+
+def test_verify_ssl_env_opt_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operators on the self-signed sandbox opt out explicitly via env."""
+    monkeypatch.setenv("VMANAGE_VERIFY_SSL", "false")
+    cfg = load_config(str(tmp_path / "nope.yaml"))
+    assert cfg.vmanage.verify_ssl is False
+
+
 def test_bare_yaml_sections_fall_back_to_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

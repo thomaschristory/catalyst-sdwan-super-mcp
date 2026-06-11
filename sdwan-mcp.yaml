@@ -3,7 +3,7 @@ vmanage:
   # https://devnetsandbox.cisco.com/RM/Diagram/Index/c9679e44-d4c8-4dc5-b1b4-92e36f3da46b
   host: sandbox-sdwan-2.cisco.com
   port: 443
-  verify_ssl: false
+  verify_ssl: false        # sandbox uses a self-signed cert; the default is TRUE — set true (or VMANAGE_VERIFY_SSL=true) for production
   username: "${VMANAGE_USERNAME}"
   password: "${VMANAGE_PASSWORD}"
   use_jwt: true            # 20.15+ supports the modern JWT endpoint; set false to force session

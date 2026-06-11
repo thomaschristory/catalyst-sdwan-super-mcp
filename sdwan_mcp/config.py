@@ -86,7 +86,12 @@ class VManageConfig(_Base):
     # server runs out of the box once credentials are supplied via env.
     host: str = "sandbox-sdwan-2.cisco.com"
     port: int = 443
-    verify_ssl: bool = False
+    # Secure by default (#55 H1): credentials are POSTed to /j_security_check, so
+    # an unverified channel exposes them to an on-path attacker the moment the
+    # host points at a real vManage. Operators on the self-signed DevNet sandbox
+    # opt out explicitly with VMANAGE_VERIFY_SSL=false (the shipped sdwan-mcp.yaml
+    # sets it). server.py emits a loud WARNING whenever it is disabled.
+    verify_ssl: bool = True
     username: str = ""
     password: str = ""
     use_jwt: bool = True  # True = JWT (20.18.1+), False = session-based

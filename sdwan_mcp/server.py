@@ -364,6 +364,16 @@ async def _connect_and_register(
         )
     index = loader.load()
 
+    if not config.vmanage.verify_ssl:
+        print(
+            "[server] WARNING: TLS certificate verification is DISABLED for "
+            f"vManage ({config.vmanage.host}). Credentials are sent over an "
+            "unverified channel and can be captured by an on-path attacker. "
+            "Only acceptable for self-signed lab/sandbox hosts — set "
+            "VMANAGE_VERIFY_SSL=true (or verify_ssl: true) against production.",
+            file=sys.stderr,
+        )
+
     auth = VManageAuth(
         host=config.vmanage.host,
         port=config.vmanage.port,

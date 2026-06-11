@@ -15,6 +15,7 @@ import asyncio
 import random
 import re
 from typing import Any, TypeAlias
+from urllib.parse import quote
 
 import httpx
 
@@ -194,10 +195,15 @@ class Dispatcher:
             )
             query_params.update(unknown_params)
 
-        # Substitute path params into URL template
+        # Substitute path params into the URL template. Each value is
+        # percent-encoded with safe='' (#55 L3) so a value containing '/', '..',
+        # '?', or '#' cannot reshape the request path to a sibling endpoint —
+        # request-path injection under the server's privileged vManage session.
+        # quote() leaves unreserved chars (letters, digits, '-._~') untouched,
+        # so ordinary ids like '10.0.0.1' pass through unchanged.
         url = op.path
         for name, value in path_params.items():
-            url = url.replace(f"{{{name}}}", str(value))
+            url = url.replace(f"{{{name}}}", quote(str(value), safe=""))
 
         # Check for any unresolved path params
         if "{" in url:
