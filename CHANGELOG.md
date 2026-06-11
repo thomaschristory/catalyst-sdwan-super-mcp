@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-11
+
+Closes the [v0.3.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/5). Patch release — the only change is a startup-crash fix, no behavior change.
+
+### Fixed
+- Tool registration no longer crashes at startup with
+  `PydanticSchemaGenerationError: Unable to generate pydantic-core schema for
+  <class 'sdwan_mcp.dispatcher.Dispatcher'>`. The handler factory used a
+  default-arg value-capture pattern that leaked internal closures
+  (`_dispatcher: Dispatcher`, `_valid`, `_name`) into the handler signature;
+  **fastmcp 3.x** introspects the full signature to build each tool's input
+  schema and could not generate a schema for the arbitrary `Dispatcher` type.
+  Handlers are now built by a closure factory so the only parameters fastmcp
+  sees are `action` and `params`. This surfaced after `uv tool install`
+  resolved the unpinned `fastmcp>=2.0` dependency to 3.x. (#52)
+
 ## [0.3.0] - 2026-06-11
 
 Closes the [v0.3.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/4). Bumped to a minor (not 0.2.3) because the config loader is now env-first and the YAML file is optional — a behavior change. Together with #44 (released in 0.2.2) this makes the server usable out of the box under `uv tool install` + an MCP client.
