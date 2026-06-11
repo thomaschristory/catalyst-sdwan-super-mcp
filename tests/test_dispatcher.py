@@ -119,16 +119,19 @@ def _op(path: str, method: str = "get") -> OperationSpec:
 
 
 def test_stats_hint_fires_on_rest0001_code() -> None:
-    """REST0001 in the body triggers the hint regardless of path."""
+    """REST0001 in the body triggers the confident hint regardless of path."""
     hint = _stats_db_hint(_op("/device/monitor"), 500, REST0001_BODY)
     assert hint is not None
-    assert "statistics" in hint.lower()
+    assert hint.startswith("vManage returned REST0001")  # confident lead-in
 
 
-def test_stats_hint_fires_on_statistics_path() -> None:
-    """A 500 on a /statistics/* path triggers the hint even without REST0001."""
+def test_stats_hint_path_only_is_hedged() -> None:
+    """A 500 on /statistics/* without REST0001 hedges — it might be a
+    validation/permission error, not a stats-DB outage (review of PR #59)."""
     hint = _stats_db_hint(_op("/statistics/system/status"), 500, {"error": "opaque"})
     assert hint is not None
+    assert "validation or permission error" in hint
+    assert "REST0001" not in hint
 
 
 def test_stats_hint_silent_on_unrelated_500() -> None:

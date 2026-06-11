@@ -320,28 +320,40 @@ def _error_code(body: Any) -> str:
     return ""
 
 
+# Shared list of likely causes + remediation, appended to whichever lead-in fits.
+_STATS_DB_CAUSES = (
+    "Common causes: the statistics database is disabled or has no data on this "
+    "deployment, or the query needs a bounded time window — supply a 'query' "
+    "payload (e.g. a rule on entry_time with last_n_hours). Real-time and "
+    "device-state endpoints are unaffected. Check Administration > Settings > "
+    "Statistics Database on vManage if this persists."
+)
+
+
 def _stats_db_hint(op: OperationSpec, status_code: int, body: Any) -> str | None:
     """Add an actionable hint for the statistics-database 500s seen in #56.
 
     vManage's ``/dataservice/statistics/*`` family returns HTTP 500 ``REST0001``
     ("vManage server experienced an unexpected error") when the statistics DB is
-    disabled/empty or the query lacks a bounded time-window, while real-time and
+    disabled/empty or the query lacks a bounded time window, while real-time and
     device-state endpoints on the same server work. The raw 500 is opaque, so we
-    annotate it rather than leaving the caller to guess. Triggered by either the
-    REST0001 code or a statistics-DB path, so it survives minor body drift."""
+    annotate it.
+
+    The wording is deliberately tiered to avoid over-claiming: a ``REST0001``
+    body is the strong stats-DB signal and gets a confident lead-in, whereas a
+    plain 500 on a ``/statistics`` path could equally be a validation or
+    permission error, so that lead-in is hedged."""
     if status_code != 500:
         return None
+    is_rest0001 = _error_code(body) == "REST0001"
     is_stats_path = op.path.startswith("/statistics")
-    if not (is_stats_path or _error_code(body) == "REST0001"):
+    if not (is_rest0001 or is_stats_path):
         return None
+    if is_rest0001:
+        return f"vManage returned REST0001 for this statistics-database query. {_STATS_DB_CAUSES}"
     return (
-        "This is a statistics-database query and vManage returned a server-side "
-        "error (REST0001). It usually means the statistics DB is disabled or has "
-        "no data on this deployment, or the query needs a bounded time window — "
-        "supply a 'query' payload (e.g. a rule on entry_time with last_n_hours). "
-        "Real-time and device-state endpoints are unaffected. Check "
-        "Administration > Settings > Statistics Database on vManage if this "
-        "persists."
+        "This statistics-database endpoint returned a server-side 500. If this is "
+        f"a stats-DB query rather than a validation or permission error: {_STATS_DB_CAUSES}"
     )
 
 
