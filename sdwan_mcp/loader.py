@@ -45,6 +45,50 @@ RW_METHODS = frozenset({"get", "post", "put", "delete", "patch"})
 
 SKIP_METHODS = frozenset({"head", "options", "trace"})
 
+# vManage models its statistics-database queries as POST: the query DSL rides in
+# the request body. The GET twin (same path, `?query=…`) is rejected with REST0001
+# on current builds. These POSTs are non-mutating reads, so read-only mode must
+# admit them — otherwise the entire historical-stats surface is unreachable (#62).
+# Recognised by: a /statistics path whose operationId names a read (get*) or whose
+# leaf is a query verb (aggregation/doccount/page). This deliberately excludes the
+# genuinely-mutating POSTs under /statistics — createQueueEntry (on-demand/queue),
+# setDynamicCollection (dynamic/collect), generateDCA…, downloadList — which name a
+# write verb and never end in a query suffix.
+_STATS_QUERY_LEAVES = frozenset({"aggregation", "doccount", "page"})
+
+# Leading operationId tokens that name a state change. Used as a deny-guard so a
+# future spec that adds a *mutating* POST on a query-suffix path (e.g.
+# `createAggregation` on `…/aggregation`) is never admitted to read-only mode.
+_MUTATING_OP_PREFIXES = (
+    "create",
+    "set",
+    "update",
+    "edit",
+    "delete",
+    "remove",
+    "add",
+    "save",
+    "generate",
+    "download",
+    "upload",
+    "import",
+    "export",
+    "push",
+    "reset",
+    "clear",
+    "enable",
+    "disable",
+    "start",
+    "stop",
+    "restart",
+    "collect",
+    "trigger",
+    "deploy",
+    "apply",
+    "activate",
+    "deactivate",
+)
+
 DEFAULT_MAX_ACTIONS_PER_TOOL = 150
 PATH_SPLIT_START_DEPTH = 3
 PATH_SPLIT_MAX_DEPTH = 5
@@ -165,6 +209,46 @@ def _last_non_templated_segment(segments: list[str]) -> str:
         if not _TEMPLATED_RE.match(seg):
             return seg
     return "root"
+
+
+def _is_readsafe_stats_query(op: OperationSpec) -> bool:
+    """
+    True for non-mutating POST statistics-DB *query* endpoints (see #62).
+
+    These carry the query DSL in the request body and only read data, so they
+    are safe to register in read-only mode. Mutating POSTs under /statistics
+    (createQueueEntry, setDynamicCollection, generateDCA…, downloadList) name a
+    write verb and never end in a query suffix, so they fall through to False.
+    """
+    if op.method != "post":
+        return False
+    segs = _path_segments(op.path)
+    if "statistics" not in segs:
+        return False
+    op_id = op.operation_id.lower()
+    # A write verb in the operationId is disqualifying regardless of the path —
+    # it guards the leaf-suffix clause below against a future mutating POST.
+    if op_id.startswith(_MUTATING_OP_PREFIXES):
+        return False
+    # Primary signal: a read-named POST (the get*-by-POST query idiom).
+    if op_id.startswith("get"):
+        return True
+    # Fallback: a query-shaped leaf (aggregation/doccount/page) that survived the
+    # write-verb guard — covers read POSTs whose opId doesn't start with "get".
+    return bool(segs) and segs[-1] in _STATS_QUERY_LEAVES
+
+
+def _is_broken_stats_query_get(op: OperationSpec) -> bool:
+    """
+    True for the GET raw-query form of a statistics endpoint — the one that
+    declares a `query` URL parameter and is rejected with REST0001 on current
+    builds. Its read-safe POST twin (same path) supersedes it in RO mode.
+    """
+    if op.method != "get":
+        return False
+    if "statistics" not in _path_segments(op.path):
+        return False
+    return any(p.name == "query" and p.location == "query" for p in op.parameters)
 
 
 def _tag_section(tag: str) -> str:
@@ -491,6 +575,7 @@ class SpecLoader:
     ):
         self.version_dir = Path(specs_dir) / version
         self.version = version
+        self.read_write = read_write
         self.allowed_methods = RW_METHODS if read_write else RO_METHODS
         self.max_actions_per_tool = max(0, int(max_actions_per_tool))
 
@@ -508,9 +593,35 @@ class SpecLoader:
     def load(self) -> SpecIndex:
         merged = self._load_and_merge()
         ops = self._extract_operations(merged)
-        ops = [op for op in ops if op.method in self.allowed_methods]
+        ops = self._filter_methods(ops)
         groups = self._split_into_groups(ops)
         return self._build_index(groups)
+
+    def _filter_methods(self, ops: list[OperationSpec]) -> list[OperationSpec]:
+        """
+        Keep only the operations the current mode is allowed to expose.
+
+        RW mode: a straight method allowlist (GET + POST + PUT + DELETE + PATCH).
+
+        RO mode: GET endpoints, plus the non-mutating POST statistics-DB query
+        endpoints that vManage only serves over POST (#62). When such a POST is
+        admitted, its broken GET raw-query twin (`?query=…`, REST0001) on the
+        same path is dropped so the working POST form is the only one exposed.
+        """
+        if self.read_write:
+            return [op for op in ops if op.method in self.allowed_methods]
+
+        readsafe_posts = [op for op in ops if _is_readsafe_stats_query(op)]
+        superseded_get_paths = {op.path for op in readsafe_posts}
+
+        kept = [
+            op
+            for op in ops
+            if op.method == "get"
+            and not (op.path in superseded_get_paths and _is_broken_stats_query_get(op))
+        ]
+        kept.extend(readsafe_posts)
+        return kept
 
     # ------------------------------------------------------------------
     # Step 1: load all sub-spec files and merge into one dict

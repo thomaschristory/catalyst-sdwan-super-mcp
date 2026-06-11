@@ -154,6 +154,25 @@ def test_stats_hint_fires_on_rest0001_code() -> None:
     assert hint.startswith("vManage returned REST0001")  # confident lead-in
 
 
+def test_stats_hint_points_get_query_form_at_post_variant() -> None:
+    """A REST0001 on the GET `?query=` form names the POST fix, not the DB guess (#62)."""
+    from sdwan_mcp.loader import ParameterSpec
+
+    op = OperationSpec(
+        operation_id="getStatDataRawData",
+        action_name="get_bfd",
+        summary="",
+        method="get",
+        path="/statistics/bfd",
+        tag="Monitoring - BFD",
+        parameters=[ParameterSpec(name="query", location="query")],
+    )
+    hint = _stats_db_hint(op, 500, REST0001_BODY)
+    assert hint is not None
+    assert "POST variant" in hint
+    assert "read-only mode" in hint
+
+
 def test_stats_hint_path_only_is_hedged() -> None:
     """A 500 on /statistics/* without REST0001 hedges — it might be a
     validation/permission error, not a stats-DB outage (review of PR #59)."""

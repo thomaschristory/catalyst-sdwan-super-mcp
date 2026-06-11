@@ -336,6 +336,10 @@ _STATS_DB_CAUSES = (
 )
 
 
+def _has_query_param(op: OperationSpec) -> bool:
+    return any(p.name == "query" and p.location == "query" for p in op.parameters)
+
+
 def _stats_db_hint(op: OperationSpec, status_code: int, body: Any) -> str | None:
     """Add an actionable hint for the statistics-database 500s seen in #56.
 
@@ -355,6 +359,18 @@ def _stats_db_hint(op: OperationSpec, status_code: int, body: Any) -> str | None
     is_stats_path = op.path.startswith("/statistics")
     if not (is_rest0001 or is_stats_path):
         return None
+    # The GET raw-query form (`?query=…`) of a statistics endpoint is rejected
+    # with REST0001 on current builds; the POST twin (query in the body) works.
+    # Read-only mode now prefers that POST form, but a caller can still reach the
+    # broken GET in read-write mode — so name the real fix rather than the
+    # stats-DB-disabled guess. (#62)
+    if is_rest0001 and op.method == "get" and _has_query_param(op):
+        return (
+            "vManage rejected the GET raw-query form of this statistics endpoint "
+            "(REST0001). This build only serves the query over POST, with the "
+            "filter in the request body. Use the POST variant of this action (it "
+            "is registered even in read-only mode) and pass a 'query' payload."
+        )
     if is_rest0001:
         return f"vManage returned REST0001 for this statistics-database query. {_STATS_DB_CAUSES}"
     return (

@@ -81,10 +81,26 @@ for the `--diff` utility but never reaches the user.
 
 HTTP method filtering at startup:
 
-- RO mode (default): registers GET endpoints only
+- RO mode (default): registers GET endpoints, **plus the non-mutating POST
+  statistics-DB query endpoints** (see below)
 - RW mode (`--read-write` flag): registers GET + POST + PUT + DELETE + PATCH
 
 The LLM never sees write tools in RO mode — they are not registered, not in context.
+
+**Statistics-query exception (#62).** vManage serves its `/statistics/**`
+historical queries as POST (the query DSL is the request body); the `GET ?query=…`
+twin is rejected with `REST0001` on current builds. Filtering RO mode to GET-only
+left the entire historical-stats surface unreachable. So `_filter_methods()` admits
+POST `/statistics/**` ops that look like **reads** and drops the broken GET twin on
+the same path. "Read" is decided by `_is_readsafe_stats_query()`: the operationId
+must not start with a write verb (`create`/`set`/`update`/… — `_MUTATING_OP_PREFIXES`),
+and then either starts with `get` or sits on a query-shaped leaf
+(`aggregation`/`doccount`/`page`). This is a deliberate, spec-version-coupled
+heuristic: it leans on Cisco's `operationId` verb prefix as a read/write **gate**
+(not as an identity — action names are still derived from `(method, path, tag)`).
+The trade-off is accepted because the alternative (no signal) leaves stats broken;
+if a future spec renames a `get*` stats read, it would silently fall out of RO mode
+rather than mis-expose a write — fail-safe, not fail-open.
 
 ---
 
