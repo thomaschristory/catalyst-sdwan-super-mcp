@@ -32,9 +32,7 @@ def _scrub_test_env_keys() -> Iterator[None]:
         os.environ.pop(key, None)
 
 
-def test_load_env_finds_dotenv_in_cwd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_env_finds_dotenv_in_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A .env in the current working directory is loaded regardless of where
     the package itself lives on disk."""
     monkeypatch.delenv("SDWAN_TEST_CWD_VAR", raising=False)
@@ -67,9 +65,7 @@ def test_load_env_finds_dotenv_next_to_config(
     assert os.environ["SDWAN_TEST_CFG_VAR"] == "from-config-dir"
 
 
-def test_exported_env_wins_over_dotenv(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_exported_env_wins_over_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An already-exported shell variable must not be clobbered by .env."""
     monkeypatch.setenv("SDWAN_TEST_PRECEDENCE", "from-shell")
     (tmp_path / ".env").write_text("SDWAN_TEST_PRECEDENCE=from-file\n")
@@ -80,9 +76,7 @@ def test_exported_env_wins_over_dotenv(
     assert os.environ["SDWAN_TEST_PRECEDENCE"] == "from-shell"
 
 
-def test_load_env_no_dotenv_is_noop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_env_no_dotenv_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No .env anywhere reachable must not raise."""
     monkeypatch.chdir(tmp_path)
     _load_env()  # must not raise
