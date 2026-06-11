@@ -187,6 +187,15 @@ class AppConfig(BaseSettings):
     sdwan: SDWANConfig = Field(default_factory=SDWANConfig)
     transport: TransportConfig = Field(default_factory=TransportConfig)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_none_sections(cls, data: Any) -> Any:
+        # A bare YAML section (e.g. `vmanage:` with nothing under it) parses to
+        # None; drop it so the section's defaults apply instead of erroring.
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
+
     @classmethod
     def settings_customise_sources(
         cls,

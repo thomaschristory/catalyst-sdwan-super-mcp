@@ -55,6 +55,20 @@ def test_load_config_missing_file_returns_defaults(
     assert cfg.transport.mode == "stdio"
 
 
+def test_bare_yaml_sections_fall_back_to_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bare `vmanage:` section (parses to None) must not crash."""
+    for var in ("VMANAGE_HOST", "VMANAGE_USERNAME", "VMANAGE_PASSWORD"):
+        monkeypatch.delenv(var, raising=False)
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("vmanage:\nsdwan:\ntransport:\n")
+    config = load_config(str(cfg))
+    assert config.vmanage.host == "sandbox-sdwan-2.cisco.com"
+    assert config.sdwan.active_version == "20.18"
+    assert config.transport.mode == "stdio"
+
+
 def test_load_config_missing_file_required_raises(tmp_path: Path) -> None:
     """When the user explicitly asks for a file (required=True), missing errors."""
     with pytest.raises(FileNotFoundError):
