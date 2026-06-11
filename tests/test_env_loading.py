@@ -10,11 +10,26 @@ current working directory instead (and, as a bonus, next to ``--config``).
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from sdwan_mcp.server import _load_env
+
+# Keys these tests inject via real .env files. load_dotenv() writes straight to
+# os.environ and is not tracked by monkeypatch, so scrub them around every test
+# to keep the process environment clean for unrelated tests.
+_TEST_KEYS = ("SDWAN_TEST_CWD_VAR", "SDWAN_TEST_CFG_VAR", "SDWAN_TEST_PRECEDENCE")
+
+
+@pytest.fixture(autouse=True)
+def _scrub_test_env_keys() -> Iterator[None]:
+    for key in _TEST_KEYS:
+        os.environ.pop(key, None)
+    yield
+    for key in _TEST_KEYS:
+        os.environ.pop(key, None)
 
 
 def test_load_env_finds_dotenv_in_cwd(
