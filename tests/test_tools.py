@@ -54,7 +54,8 @@ def test_register_tools_does_not_leak_internal_params(tiny_index):
     fails with PydanticSchemaGenerationError on the arbitrary type."""
     mcp = FastMCP("test")
     count = register_tools(mcp, tiny_index, _StubDispatcher())
-    assert count == len(tiny_index.groups) >= 1
+    assert len(tiny_index.groups) >= 1
+    assert count == len(tiny_index.groups)
 
 
 @pytest.mark.asyncio
