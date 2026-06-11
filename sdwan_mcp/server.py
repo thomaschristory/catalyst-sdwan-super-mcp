@@ -29,7 +29,7 @@ from starlette.middleware import Middleware
 
 from . import __version__
 from .auth import VManageAuth, require_credentials
-from .config import AppConfig, load_config
+from .config import DEFAULT_CONFIG_PATH, AppConfig, load_config
 from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
 from .fetcher import (
@@ -63,9 +63,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--version-info", action="version", version=f"sdwan-mcp {__version__}")
     parser.add_argument(
         "--config",
-        default="sdwan-mcp.yaml",
+        default=None,
         metavar="PATH",
-        help="Path to the config file (default: ./sdwan-mcp.yaml)",
+        help=(
+            "Path to the config file (default: ./sdwan-mcp.yaml if present). "
+            "The file is optional — credentials can come from the environment "
+            "(VMANAGE_USERNAME, VMANAGE_PASSWORD) or a .env file."
+        ),
     )
     parser.add_argument(
         "--transport",
@@ -279,7 +283,7 @@ async def _connect_and_register(
 ) -> tuple[FastMCP, Dispatcher, TransportMode, str, int, list[Middleware]]:
     """Async pre-flight: load config, log in to vManage, register tools."""
     _load_env(args.config)
-    config = load_config(args.config)
+    config = load_config(args.config or DEFAULT_CONFIG_PATH, required=args.config is not None)
 
     # Fail fast: spec loading (and auto-fetch) is pointless without credentials.
     require_credentials(config.vmanage.username, config.vmanage.password)
@@ -434,7 +438,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.diff:
         _load_env(args.config)
-        config = load_config(args.config)
+        config = load_config(args.config or DEFAULT_CONFIG_PATH, required=args.config is not None)
         run_diff(config.sdwan.specs_dir, args.diff[0], args.diff[1])
         return 0
 
