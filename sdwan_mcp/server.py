@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import Literal, cast
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
 from starlette.middleware import Middleware
 
@@ -198,6 +198,26 @@ def run_diff(specs_dir: str, old_version: str, new_version: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _load_env(config_path: str | None = None) -> None:
+    """Load a ``.env`` so ``${VAR}`` interpolation and credentials resolve.
+
+    python-dotenv's bare ``load_dotenv()`` searches upward from *this module's*
+    directory. Once the package is installed (``uv tool install`` / pipx), that
+    is site-packages — so a ``.env`` in the user's project dir is never found
+    (#44). We instead search the current working directory, and additionally
+    next to the ``--config`` file when one is given. Already-exported shell
+    variables always win (``override=False``)."""
+    # .env in the cwd (or any parent) — the usual "run it from my project" case.
+    cwd_env = find_dotenv(usecwd=True)
+    if cwd_env:
+        load_dotenv(cwd_env)
+    # .env beside the config file — covers `--config /elsewhere/sdwan-mcp.yaml`.
+    if config_path:
+        cfg_env = Path(config_path).resolve().parent / ".env"
+        if cfg_env.is_file():
+            load_dotenv(cfg_env)
+
+
 def _load_config_or_default(config_path: str) -> AppConfig:
     """Load config if present; otherwise return defaults (fetch needs no vManage creds)."""
     try:
@@ -211,7 +231,7 @@ def run_fetch(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if not args.version and not args.all_known:
         parser.error("specify --version VERSION or --all-known")
-    load_dotenv()
+    _load_env(args.config)
     config = _load_config_or_default(args.config)
     specs_dir = Path(config.sdwan.specs_dir)
     versions = list(KNOWN_VERSIONS) if args.all_known else [args.version]
@@ -258,7 +278,7 @@ async def _connect_and_register(
     args: argparse.Namespace,
 ) -> tuple[FastMCP, Dispatcher, TransportMode, str, int, list[Middleware]]:
     """Async pre-flight: load config, log in to vManage, register tools."""
-    load_dotenv()
+    _load_env(args.config)
     config = load_config(args.config)
 
     version = args.version or config.sdwan.active_version
@@ -410,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if args.diff:
-        load_dotenv()
+        _load_env(args.config)
         config = load_config(args.config)
         run_diff(config.sdwan.specs_dir, args.diff[0], args.diff[1])
         return 0

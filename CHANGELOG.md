@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `.env` is now discovered from the current working directory (and next to
+  `--config`) instead of from the package's install location. python-dotenv's
+  bare `load_dotenv()` searches upward from the calling module's directory,
+  which is site-packages once installed via `uv tool install`/pipx — so a
+  `.env` in the user's project dir was silently never loaded. Exported shell
+  variables still take precedence. The "credentials not set" error now also
+  explains that MCP clients don't inherit shell exports. (#44)
 - `milestone-rollover.yml` now triggers on `push: tags` instead of
   `release: published`. The previous trigger was unreachable because
   `release.yml`'s `gh release create` step runs under the default
