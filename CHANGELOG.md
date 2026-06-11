@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-12
+
+Closes the [v0.4.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/7) (#62).
+
+### Fixed
+- **Read-only mode can now reach the statistics-database query endpoints (#62).**
+  vManage models its `/statistics/**` queries as **POST** (the query DSL rides in
+  the request body); the `GET ?query=…` twin is rejected with `REST0001` on
+  current builds. Read-only mode previously filtered to GET-only, so it exposed
+  only the broken GET form and the entire historical-stats surface 500'd. The
+  loader now admits **non-mutating** POST statistics-query endpoints in read-only
+  mode and drops the superseded broken-GET twin, so `monitoring_bfd`,
+  `monitoring_system_status_stats`, and the rest of the `statistics/*` query
+  surface work without `--read-write`. Genuinely mutating POSTs under
+  `/statistics` (e.g. `createQueueEntry`, `setDynamicCollection`) remain excluded
+  from read-only mode, guarded by an operationId write-verb deny-list.
+
+### Changed (behavior)
+- In read-only mode, statistics-query actions are now the working POST form
+  (e.g. `post_bfd`, `post_bfd_doccount`) instead of the broken GET form
+  (`get_bfd`, …), which is no longer registered. Read-write mode is unchanged
+  (both twins still load). The `#56` stats-DB 500 hint now points a failing GET
+  raw-query form at its POST variant.
+
 ## [0.4.0] - 2026-06-11
 
 Closes the [v0.4.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/6) (#55, #56, #57). Bumped to a minor (not the v0.3.2 patch tag) because TLS verification is now **on by default** — a behavior change for anyone relying on the old insecure default.

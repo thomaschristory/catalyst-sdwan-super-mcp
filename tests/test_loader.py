@@ -113,6 +113,151 @@ def test_loader_missing_dir_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Read-only mode admits non-mutating POST statistics-DB queries (#62)
+# ---------------------------------------------------------------------------
+
+_QUERY_PARAM = [{"name": "query", "in": "query", "required": False, "schema": {"type": "string"}}]
+
+
+def _stats_twin_ops() -> list[dict]:
+    """GET (broken `?query=`) + POST (working, query-in-body) twins for a stats index."""
+    tag = "Monitoring - BFD"
+    ops: list[dict] = []
+    for leaf in ("", "/doccount", "/aggregation", "/page"):
+        ops.append(
+            {
+                "path": f"/statistics/bfd{leaf}",
+                "method": "get",
+                "tag": tag,
+                "op_id": f"getStatDataRawData_Bfd{leaf}",
+                "params": _QUERY_PARAM,
+            }
+        )
+        ops.append(
+            {
+                "path": f"/statistics/bfd{leaf}",
+                "method": "post",
+                "tag": tag,
+                "op_id": f"getStatsRawData_Bfd{leaf}",
+            }
+        )
+    return ops
+
+
+def test_ro_mode_registers_readsafe_statistics_post(tmp_path: Path) -> None:
+    specs_root = _make_spec(tmp_path, "20.99", _stats_twin_ops())
+    index = SpecLoader(str(specs_root), "20.99", read_write=False).load()
+
+    # The working POST query forms are exposed even in read-only mode.
+    for action in ("post_bfd", "post_bfd_doccount", "post_bfd_aggregation", "post_bfd_page"):
+        assert action in index.by_action_name, action
+        assert index.by_action_name[action].method == "post"
+
+
+def test_ro_mode_drops_broken_get_query_twin(tmp_path: Path) -> None:
+    specs_root = _make_spec(tmp_path, "20.99", _stats_twin_ops())
+    index = SpecLoader(str(specs_root), "20.99", read_write=False).load()
+
+    # The broken GET raw-query form is superseded by its POST twin and removed.
+    for action in ("get_bfd", "get_bfd_doccount", "get_bfd_aggregation", "get_bfd_page"):
+        assert action not in index.by_action_name, action
+
+
+def test_ro_mode_keeps_query_less_get_statistics(tmp_path: Path) -> None:
+    # GET /statistics (no `query` param) is a working list read — keep it.
+    ops = [
+        {
+            "path": "/statistics",
+            "method": "get",
+            "tag": "Monitoring - Stats",
+            "op_id": "getStatsList",
+        },
+        {
+            "path": "/statistics",
+            "method": "post",
+            "tag": "Monitoring - Stats",
+            "op_id": "getStatsRawData",
+        },
+    ]
+    specs_root = _make_spec(tmp_path, "20.99", ops)
+    index = SpecLoader(str(specs_root), "20.99", read_write=False).load()
+
+    assert "get_stats_statistics" in index.by_action_name
+    assert "post_stats_statistics" in index.by_action_name
+
+
+def test_ro_mode_excludes_mutating_statistics_post(tmp_path: Path) -> None:
+    # POST endpoints under /statistics that name a write verb must stay out of RO mode.
+    ops = [
+        {
+            "path": "/statistics/on-demand/queue",
+            "method": "get",
+            "tag": "Monitoring - OnDemand",
+            "op_id": "getQueueEntries",
+        },
+        {
+            "path": "/statistics/on-demand/queue",
+            "method": "post",
+            "tag": "Monitoring - OnDemand",
+            "op_id": "createQueueEntry",
+        },
+        {
+            "path": "/statistics/dynamic/collect",
+            "method": "post",
+            "tag": "Monitoring - Dynamic",
+            "op_id": "setDynamicCollection",
+        },
+        {
+            "path": "/statistics/download/{processType}/filelist",
+            "method": "post",
+            "tag": "Monitoring - Download",
+            "op_id": "downloadList",
+        },
+    ]
+    specs_root = _make_spec(tmp_path, "20.99", ops)
+    index = SpecLoader(str(specs_root), "20.99", read_write=False).load()
+
+    post_actions = [a for a, op in index.by_action_name.items() if op.method == "post"]
+    assert post_actions == [], f"mutating POSTs leaked into RO mode: {post_actions}"
+    # The genuine GET read on the same path is still available.
+    assert "get_ondemand_queue" in index.by_action_name
+
+
+def test_ro_mode_excludes_mutating_post_on_query_suffix_path(tmp_path: Path) -> None:
+    # A write-verb POST that happens to sit on a query-suffix leaf (aggregation/
+    # doccount/page) must NOT be admitted — the leaf-suffix fallback is guarded by
+    # the operationId write-verb deny-list. (review of #62)
+    ops = [
+        {
+            "path": "/statistics/bfd/aggregation",
+            "method": "post",
+            "tag": "Monitoring - BFD",
+            "op_id": "createAggregation",
+        },
+        {
+            "path": "/statistics/bfd/page",
+            "method": "post",
+            "tag": "Monitoring - BFD",
+            "op_id": "setPageRollup",
+        },
+    ]
+    specs_root = _make_spec(tmp_path, "20.99", ops)
+    index = SpecLoader(str(specs_root), "20.99", read_write=False).load()
+
+    post_actions = [a for a, op in index.by_action_name.items() if op.method == "post"]
+    assert post_actions == [], f"mutating POSTs leaked into RO mode: {post_actions}"
+
+
+def test_rw_mode_keeps_both_get_and_post_stats_twins(tmp_path: Path) -> None:
+    specs_root = _make_spec(tmp_path, "20.99", _stats_twin_ops())
+    index = SpecLoader(str(specs_root), "20.99", read_write=True).load()
+
+    # RW mode is unchanged: the broken GET twin is NOT dropped.
+    assert "get_bfd" in index.by_action_name
+    assert "post_bfd" in index.by_action_name
+
+
+# ---------------------------------------------------------------------------
 # Adaptive splitter
 # ---------------------------------------------------------------------------
 
