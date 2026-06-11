@@ -31,6 +31,24 @@ REFRESH_MARGIN_SECONDS = 120
 DEFAULT_TOKEN_LIFETIME_SECONDS = 1800
 
 
+def require_credentials(username: str, password: str) -> None:
+    """Raise a helpful error if vManage credentials are missing.
+
+    Called early at startup (before spec loading) to fail fast, and again in
+    ``VManageAuth.login`` as defense-in-depth."""
+    if not username or not password:
+        raise RuntimeError(
+            "vManage credentials are not set.\n"
+            "Provide VMANAGE_USERNAME and VMANAGE_PASSWORD via either:\n"
+            "  - exported shell environment variables, or\n"
+            "  - a .env file in the directory you run the command from "
+            "(or next to --config).\n"
+            "When launched by an MCP client (e.g. Claude Code), the client "
+            "does not inherit your shell exports — set them in the client's "
+            "server `env` block instead."
+        )
+
+
 class VManageAuth:
     def __init__(
         self,
@@ -61,17 +79,7 @@ class VManageAuth:
 
     async def login(self, client: httpx.AsyncClient) -> None:
         """Authenticate and populate internal token state."""
-        if not self._username or not self._password:
-            raise RuntimeError(
-                "vManage credentials are not set.\n"
-                "Provide VMANAGE_USERNAME and VMANAGE_PASSWORD via either:\n"
-                "  - exported shell environment variables, or\n"
-                "  - a .env file in the directory you run the command from "
-                "(or next to --config).\n"
-                "When launched by an MCP client (e.g. Claude Code), the client "
-                "does not inherit your shell exports — set them in the client's "
-                "server `env` block instead."
-            )
+        require_credentials(self._username, self._password)
         if self._use_jwt:
             await self._login_jwt(client)
         else:

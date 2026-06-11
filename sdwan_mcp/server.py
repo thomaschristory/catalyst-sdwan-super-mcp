@@ -28,7 +28,7 @@ from fastmcp import FastMCP
 from starlette.middleware import Middleware
 
 from . import __version__
-from .auth import VManageAuth
+from .auth import VManageAuth, require_credentials
 from .config import AppConfig, load_config
 from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
@@ -280,6 +280,9 @@ async def _connect_and_register(
     """Async pre-flight: load config, log in to vManage, register tools."""
     _load_env(args.config)
     config = load_config(args.config)
+
+    # Fail fast: spec loading (and auto-fetch) is pointless without credentials.
+    require_credentials(config.vmanage.username, config.vmanage.password)
 
     version = args.version or config.sdwan.active_version
     transport = args.transport or config.transport.mode
