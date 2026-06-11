@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-11
+
+Closes the [v0.3.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/4). Bumped to a minor (not 0.2.3) because the config loader is now env-first and the YAML file is optional — a behavior change. Together with #44 (released in 0.2.2) this makes the server usable out of the box under `uv tool install` + an MCP client.
+
 ### Changed (behavior — read this if you upgrade)
 - The YAML config file is now **optional**. Configuration is built from
   (highest priority first) CLI flags → environment variables → the YAML file →
