@@ -232,12 +232,17 @@ class Dispatcher:
             return {"_session_expired": True}
 
         if response.is_error:
-            return {
+            body = _safe_json(response)
+            result: dict[str, Any] = {
                 "error": True,
                 "status_code": response.status_code,
                 "message": f"HTTP {response.status_code}",
-                "body": _safe_json(response),
+                "body": body,
             }
+            hint = _stats_db_hint(op, response.status_code, body)
+            if hint:
+                result["hint"] = hint
+            return result
 
         return _safe_json(response)
 
@@ -304,6 +309,40 @@ class Dispatcher:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _error_code(body: Any) -> str:
+    """Pull vManage's nested error code (e.g. 'REST0001') out of a response body."""
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict):
+            return str(err.get("code", ""))
+    return ""
+
+
+def _stats_db_hint(op: OperationSpec, status_code: int, body: Any) -> str | None:
+    """Add an actionable hint for the statistics-database 500s seen in #56.
+
+    vManage's ``/dataservice/statistics/*`` family returns HTTP 500 ``REST0001``
+    ("vManage server experienced an unexpected error") when the statistics DB is
+    disabled/empty or the query lacks a bounded time-window, while real-time and
+    device-state endpoints on the same server work. The raw 500 is opaque, so we
+    annotate it rather than leaving the caller to guess. Triggered by either the
+    REST0001 code or a statistics-DB path, so it survives minor body drift."""
+    if status_code != 500:
+        return None
+    is_stats_path = op.path.startswith("/statistics")
+    if not (is_stats_path or _error_code(body) == "REST0001"):
+        return None
+    return (
+        "This is a statistics-database query and vManage returned a server-side "
+        "error (REST0001). It usually means the statistics DB is disabled or has "
+        "no data on this deployment, or the query needs a bounded time window — "
+        "supply a 'query' payload (e.g. a rule on entry_time with last_n_hours). "
+        "Real-time and device-state endpoints are unaffected. Check "
+        "Administration > Settings > Statistics Database on vManage if this "
+        "persists."
+    )
 
 
 def _safe_json(response: httpx.Response) -> DispatchResult:

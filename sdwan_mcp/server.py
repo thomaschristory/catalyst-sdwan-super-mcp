@@ -399,15 +399,26 @@ async def _connect_and_register(
     return mcp, dispatcher, transport_mode, host, port, middleware_list
 
 
-def build_and_run(args: argparse.Namespace) -> None:
-    """FastMCP.run() owns its own event loop, so async pre-flight runs first."""
-    mcp, dispatcher, transport, host, port, middleware = asyncio.run(_connect_and_register(args))
+async def _serve(args: argparse.Namespace) -> None:
+    """Run async pre-flight and the server itself inside ONE event loop.
+
+    The dispatcher's ``httpx.AsyncClient`` is created and the vManage login
+    happens during ``_connect_and_register``. The client (and its anyio-backed
+    connection pool) is bound to whatever loop is running at that point, so the
+    server MUST be served on the *same* loop. Previously pre-flight ran in its
+    own ``asyncio.run()`` and ``mcp.run()`` then opened a *second* loop — the
+    client was left bound to the first, already-closed loop, so the first tool
+    call of a fresh session failed with "Event loop is closed" before
+    succeeding on retry (#56). Using ``mcp.run_async`` keeps both phases on the
+    one loop ``asyncio.run`` below creates.
+    """
+    mcp, dispatcher, transport, host, port, middleware = await _connect_and_register(args)
 
     try:
         if transport == "stdio":
-            mcp.run()
+            await mcp.run_async()
         else:
-            mcp.run(
+            await mcp.run_async(
                 transport=transport,
                 host=host,
                 port=port,
@@ -415,9 +426,14 @@ def build_and_run(args: argparse.Namespace) -> None:
             )
     finally:
         try:
-            asyncio.run(dispatcher.close())
+            await dispatcher.close()
         except Exception as exc:  # pragma: no cover - best effort
             print(f"[server] WARNING: shutdown error: {exc}", file=sys.stderr)
+
+
+def build_and_run(args: argparse.Namespace) -> None:
+    """Drive pre-flight + serving on a single event loop (see ``_serve``)."""
+    asyncio.run(_serve(args))
 
 
 # ---------------------------------------------------------------------------

@@ -9,8 +9,8 @@ import pytest
 import respx
 
 from sdwan_mcp.auth import VManageAuth
-from sdwan_mcp.dispatcher import Dispatcher
-from sdwan_mcp.loader import SpecLoader
+from sdwan_mcp.dispatcher import Dispatcher, _stats_db_hint
+from sdwan_mcp.loader import OperationSpec, SpecLoader
 
 
 @pytest.fixture
@@ -92,3 +92,80 @@ async def test_dispatcher_post_routes_body(dispatcher: Dispatcher) -> None:
     assert "edge-1" in body
     # deviceId must be consumed as a path param, not echoed in the body
     assert '"deviceId"' not in body
+
+
+# ---------------------------------------------------------------------------
+# Statistics-database error hint (#56)
+# ---------------------------------------------------------------------------
+
+REST0001_BODY = {
+    "error": {
+        "message": "Server error",
+        "code": "REST0001",
+        "details": "vManage server experience an unexpected error",
+    }
+}
+
+
+def _op(path: str, method: str = "get") -> OperationSpec:
+    return OperationSpec(
+        operation_id="x",
+        action_name="x",
+        summary="",
+        method=method,
+        path=path,
+        tag="t",
+    )
+
+
+def test_stats_hint_fires_on_rest0001_code() -> None:
+    """REST0001 in the body triggers the hint regardless of path."""
+    hint = _stats_db_hint(_op("/device/monitor"), 500, REST0001_BODY)
+    assert hint is not None
+    assert "statistics" in hint.lower()
+
+
+def test_stats_hint_fires_on_statistics_path() -> None:
+    """A 500 on a /statistics/* path triggers the hint even without REST0001."""
+    hint = _stats_db_hint(_op("/statistics/system/status"), 500, {"error": "opaque"})
+    assert hint is not None
+
+
+def test_stats_hint_silent_on_unrelated_500() -> None:
+    """A 500 that is neither a stats path nor REST0001 gets no hint."""
+    assert _stats_db_hint(_op("/devices"), 500, {"error": {"code": "OTHER"}}) is None
+
+
+def test_stats_hint_silent_on_non_500() -> None:
+    """Only 500s are annotated — a 404 on a stats path is left untouched."""
+    assert _stats_db_hint(_op("/statistics/system/status"), 404, REST0001_BODY) is None
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_annotates_stats_db_500(dispatcher: Dispatcher) -> None:
+    """End-to-end: a REST0001 500 surfaces the hint alongside the raw error."""
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices").mock(
+            return_value=httpx.Response(500, json=REST0001_BODY)
+        )
+        result = await dispatcher.call("get_device_details_devices", {})
+
+    assert isinstance(result, dict)
+    assert result["error"] is True
+    assert result["status_code"] == 500
+    assert result["body"] == REST0001_BODY  # raw body preserved
+    assert "hint" in result and "statistics" in result["hint"].lower()
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_no_hint_on_ordinary_500(dispatcher: Dispatcher) -> None:
+    """A non-stats 500 stays clean — no spurious hint key."""
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices").mock(
+            return_value=httpx.Response(500, json={"error": {"code": "OTHER"}})
+        )
+        result = await dispatcher.call("get_device_details_devices", {})
+
+    assert isinstance(result, dict)
+    assert result["error"] is True
+    assert "hint" not in result
