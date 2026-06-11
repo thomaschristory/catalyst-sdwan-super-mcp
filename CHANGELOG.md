@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (behavior — read this if you upgrade)
+- The YAML config file is now **optional**. Configuration is built from
+  (highest priority first) CLI flags → environment variables → the YAML file →
+  defaults, using `pydantic-settings`. Credentials and connection settings can
+  be supplied entirely via env vars — `VMANAGE_USERNAME`, `VMANAGE_PASSWORD`,
+  and optionally `VMANAGE_HOST`, `VMANAGE_PORT`, `VMANAGE_VERIFY_SSL`,
+  `VMANAGE_USE_JWT`, `VMANAGE_TIMEOUT` — with no `sdwan-mcp.yaml` on disk. This
+  fixes startup under `uv tool install` + an MCP client, where the working
+  directory is not your project dir so no YAML is found. Env vars override the
+  YAML; a `.env` is still honored. Passing `--config PATH` to a file that does
+  not exist remains an error. Built-in defaults now target the Cisco DevNet
+  sandbox (host `sandbox-sdwan-2.cisco.com`, port 443). (#49)
+
 ### Fixed
 - vManage credentials are now validated immediately after config load, before
   the spec is loaded or auto-fetched. Previously the check lived in

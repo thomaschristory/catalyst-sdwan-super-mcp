@@ -1,6 +1,21 @@
 # Configuration
 
-The server reads `./sdwan-mcp.yaml` by default (override with `--config`). Environment variables are interpolated at load time using `${VAR_NAME}` syntax.
+The YAML config file is **optional**. Configuration is resolved from these sources, highest priority first:
+
+1. **CLI flags** (e.g. `--version`, `--transport`, `--read-write`)
+2. **Environment variables** — `VMANAGE_USERNAME`, `VMANAGE_PASSWORD`, and optionally `VMANAGE_HOST`, `VMANAGE_PORT`, `VMANAGE_VERIFY_SSL`, `VMANAGE_USE_JWT`, `VMANAGE_TIMEOUT`
+3. **The YAML file** — `./sdwan-mcp.yaml` by default (override with `--config`); values still support `${VAR_NAME}` interpolation
+4. **Built-in defaults** — the Cisco DevNet sandbox
+
+You can run the server with **no config file at all** — just export the credentials (or put them in a `.env`):
+
+```bash
+export VMANAGE_USERNAME=devnetuser
+export VMANAGE_PASSWORD='...'
+sdwan-mcp
+```
+
+This is what makes the server work when installed via `uv tool install` and launched by an MCP client (whose working directory is not your project dir, so no YAML is on disk). Environment variables override matching YAML values. Passing `--config PATH` to a file that does not exist is still an error.
 
 ## Full schema
 

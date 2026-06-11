@@ -43,9 +43,46 @@ transport:
     assert config.transport.mode == "stdio"
 
 
-def test_load_config_missing_file(tmp_path: Path) -> None:
+def test_load_config_missing_file_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The YAML file is optional (#49): an absent file yields defaults + env."""
+    for var in ("VMANAGE_HOST", "VMANAGE_PORT", "VMANAGE_USERNAME", "VMANAGE_PASSWORD"):
+        monkeypatch.delenv(var, raising=False)
+    cfg = load_config(str(tmp_path / "nope.yaml"))
+    assert cfg.vmanage.host == "sandbox-sdwan-2.cisco.com"
+    assert cfg.sdwan.active_version == "20.18"
+    assert cfg.transport.mode == "stdio"
+
+
+def test_load_config_missing_file_required_raises(tmp_path: Path) -> None:
+    """When the user explicitly asks for a file (required=True), missing errors."""
     with pytest.raises(FileNotFoundError):
-        load_config(str(tmp_path / "nope.yaml"))
+        load_config(str(tmp_path / "nope.yaml"), required=True)
+
+
+def test_credentials_from_env_without_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Core scenario for #49: no config file, creds + host from env vars."""
+    monkeypatch.setenv("VMANAGE_USERNAME", "bob")
+    monkeypatch.setenv("VMANAGE_PASSWORD", "hunter2")
+    monkeypatch.setenv("VMANAGE_HOST", "vm.example.net")
+    monkeypatch.setenv("VMANAGE_PORT", "8443")
+    cfg = load_config(str(tmp_path / "absent.yaml"))
+    assert cfg.vmanage.username == "bob"
+    assert cfg.vmanage.password == "hunter2"
+    assert cfg.vmanage.base_url == "https://vm.example.net:8443/dataservice"
+
+
+def test_env_overrides_yaml_vmanage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Env vars win over YAML, but unspecified YAML fields are preserved."""
+    monkeypatch.setenv("VMANAGE_USERNAME", "from-env")
+    monkeypatch.delenv("VMANAGE_HOST", raising=False)
+    cfg_file = tmp_path / "c.yaml"
+    cfg_file.write_text("vmanage:\n  host: yaml-host\n  username: from-yaml\n  password: yaml-pw\n")
+    cfg = load_config(str(cfg_file))
+    assert cfg.vmanage.username == "from-env"  # env overrides
+    assert cfg.vmanage.host == "yaml-host"  # YAML value preserved (deep merge)
+    assert cfg.vmanage.password == "yaml-pw"
 
 
 def test_pagination_defaults(tmp_path):
@@ -192,7 +229,8 @@ transport:
     type: oidc
 """
     )
-    with pytest.raises(ValueError, match=r"unknown transport\.auth\.type"):
+    # The Literal type now rejects unknown values during model construction.
+    with pytest.raises(ValueError, match=r"transport\.auth\.type"):
         load_config(str(cfg))
 
 

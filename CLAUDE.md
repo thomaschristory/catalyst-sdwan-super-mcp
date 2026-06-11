@@ -181,8 +181,18 @@ in name order.
 
 ## Config file
 
+The YAML file is **optional** (pydantic-settings). Config precedence, highest
+first: **CLI flags → environment variables → YAML file → defaults**. Credentials
+and connection settings can come entirely from env vars (`VMANAGE_USERNAME`,
+`VMANAGE_PASSWORD`, and optionally `VMANAGE_HOST`, `VMANAGE_PORT`,
+`VMANAGE_VERIFY_SSL`, `VMANAGE_USE_JWT`, `VMANAGE_TIMEOUT`) with no file on disk
+— this is what makes `uv tool install` + MCP-client launches work (cwd is not
+the project dir). Env overrides YAML; `--config PATH` to a missing file still
+errors. `${VAR}` interpolation inside the YAML is still supported (e.g. the
+bearer token). Defaults target the DevNet sandbox. (#49)
+
 ```yaml
-# sdwan-mcp.yaml
+# sdwan-mcp.yaml (optional)
 vmanage:
   host: sandbox-sdwan-2.cisco.com   # DevNet sandbox by default
   port: 443
@@ -428,6 +438,7 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 | Auth | Username/password → JWT or session | Matches actual vManage auth flow; API tokens require extra config |
 | JWT vs session | JWT default, session fallback | JWT is simpler (one call); session needed for older deployments incl. the DevNet sandbox |
 | Cookie handling | httpx jar auto-manages JSESSIONID | Sending a manual `Cookie:` header alongside the jar produces dupes and vManage rejects |
+| Config loading | pydantic-settings; YAML optional; CLI > env > YAML > defaults | A mandatory YAML made `uv tool install` + MCP-client launches crash (no file in cwd) before creds were read. Env-first config (like the netbox sister project) lets `export VMANAGE_USERNAME/PASSWORD` or `.env` alone run the server. (#49) |
 | Spec versioning | Drop folder + config line | No codegen, easy upgrade path |
 | Spec formats | YAML, YML, **and JSON** | Cisco publishes 20.15 as YAML-with-`.json`-extension, 20.16/20.18 as plain YAML; we accept all three extensions. |
 | Transport | Flag at runtime | stdio for local, SSE/HTTP for remote/tunneled |
