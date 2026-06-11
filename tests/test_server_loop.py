@@ -16,6 +16,7 @@ import asyncio
 import pytest
 
 from sdwan_mcp import server
+from sdwan_mcp.config import AppConfig
 
 
 def _args() -> argparse.Namespace:
@@ -76,3 +77,23 @@ def test_close_runs_even_if_serve_raises(monkeypatch: pytest.MonkeyPatch) -> Non
     with pytest.raises(RuntimeError, match="boom"):
         server.build_and_run(_args())
     assert closed is True
+
+
+def test_tls_warning_fires_when_verification_disabled(capsys: pytest.CaptureFixture[str]) -> None:
+    """A disabled verify_ssl must emit a loud stderr WARNING before login (#55 H1)."""
+    cfg = AppConfig()
+    cfg.vmanage.verify_ssl = False
+    cfg.vmanage.host = "vm.prod.example"
+    server._warn_if_tls_unverified(cfg)
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "verification is DISABLED" in err
+    assert "vm.prod.example" in err
+
+
+def test_no_tls_warning_when_verification_enabled(capsys: pytest.CaptureFixture[str]) -> None:
+    """The secure default stays quiet."""
+    cfg = AppConfig()
+    cfg.vmanage.verify_ssl = True
+    server._warn_if_tls_unverified(cfg)
+    assert capsys.readouterr().err == ""

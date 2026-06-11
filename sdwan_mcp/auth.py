@@ -56,7 +56,7 @@ class VManageAuth:
         port: int,
         username: str,
         password: str,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
         use_jwt: bool = True,
     ):
         self._base_url = f"https://{host}:{port}"

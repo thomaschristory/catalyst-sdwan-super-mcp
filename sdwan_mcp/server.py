@@ -278,6 +278,24 @@ def run_list_versions(argv: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _warn_if_tls_unverified(config: AppConfig) -> None:
+    """Loudly warn (stderr) when vManage TLS verification is off (#55 H1).
+
+    Credentials are POSTed to ``/j_security_check`` over this channel, so a
+    disabled check exposes them to an on-path attacker. Called before login so
+    the warning precedes the first credentialed request."""
+    if config.vmanage.verify_ssl:
+        return
+    print(
+        "[server] WARNING: TLS certificate verification is DISABLED for "
+        f"vManage ({config.vmanage.host}). Credentials are sent over an "
+        "unverified channel and can be captured by an on-path attacker. "
+        "Only acceptable for self-signed lab/sandbox hosts — set "
+        "VMANAGE_VERIFY_SSL=true (or verify_ssl: true) against production.",
+        file=sys.stderr,
+    )
+
+
 async def _connect_and_register(
     args: argparse.Namespace,
 ) -> tuple[FastMCP, Dispatcher, TransportMode, str, int, list[Middleware]]:
@@ -364,15 +382,7 @@ async def _connect_and_register(
         )
     index = loader.load()
 
-    if not config.vmanage.verify_ssl:
-        print(
-            "[server] WARNING: TLS certificate verification is DISABLED for "
-            f"vManage ({config.vmanage.host}). Credentials are sent over an "
-            "unverified channel and can be captured by an on-path attacker. "
-            "Only acceptable for self-signed lab/sandbox hosts — set "
-            "VMANAGE_VERIFY_SSL=true (or verify_ssl: true) against production.",
-            file=sys.stderr,
-        )
+    _warn_if_tls_unverified(config)
 
     auth = VManageAuth(
         host=config.vmanage.host,
