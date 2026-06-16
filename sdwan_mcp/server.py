@@ -29,7 +29,7 @@ from starlette.middleware import Middleware
 
 from . import __version__
 from .auth import VManageAuth, require_credentials
-from .config import DEFAULT_CONFIG_PATH, AppConfig, load_config
+from .config import DEFAULT_CONFIG_PATH, AppConfig, DebugConfig, load_config
 from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
 from .fetcher import (
@@ -305,6 +305,29 @@ def run_list_versions(argv: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
+def resolve_debug_config(
+    base: DebugConfig,
+    *,
+    debug: bool | None,
+    all_calls: bool | None,
+    no_redact: bool | None,
+) -> DebugConfig:
+    """Layer the CLI debug flags over the env/YAML-derived ``DebugConfig``.
+
+    Each flag defaults to ``None`` (not ``False``), so an *unset* flag leaves
+    the env/YAML value intact — only an explicitly-passed flag overrides it,
+    preserving the CLI > env > YAML > defaults precedence used everywhere else.
+    """
+    overrides: dict[str, object] = {}
+    if debug:
+        overrides["enabled"] = True
+    if all_calls:
+        overrides["capture"] = "all"
+    if no_redact:
+        overrides["redact"] = False
+    return base.model_copy(update=overrides) if overrides else base
+
+
 def _warn_if_tls_unverified(config: AppConfig) -> None:
     """Loudly warn (stderr) when vManage TLS verification is off (#55 H1).
 
@@ -374,16 +397,12 @@ async def _connect_and_register(
     print()
 
     # Layer CLI debug flags over the env/YAML-derived DebugConfig (CLI wins).
-    debug_cfg = config.debug
-    debug_overrides: dict[str, object] = {}
-    if args.debug:
-        debug_overrides["enabled"] = True
-    if args.debug_all_calls:
-        debug_overrides["capture"] = "all"
-    if args.debug_no_redact:
-        debug_overrides["redact"] = False
-    if debug_overrides:
-        debug_cfg = debug_cfg.model_copy(update=debug_overrides)
+    debug_cfg = resolve_debug_config(
+        config.debug,
+        debug=args.debug,
+        all_calls=args.debug_all_calls,
+        no_redact=args.debug_no_redact,
+    )
     if debug_cfg.enabled:
         print(
             f"[server] Debug      : ON (capture={debug_cfg.capture}, "

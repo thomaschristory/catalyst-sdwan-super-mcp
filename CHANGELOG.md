@@ -17,10 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hint. The record carries the resolved method/path, the **exact serialized
   request body actually sent** (where the `params`-becomes-body shape gotcha shows
   up), and the full upstream status/`error_code`/headers/body, plus timing and the
-  tool/action name. Redaction is on by default and strips the auth headers
-  (`Authorization` / `X-XSRF-TOKEN` / `Cookie` / `Set-Cookie`) so captures are safe
-  to share (`debug.redact: false` / `--debug-no-redact` to disable, with a startup
-  warning). Capture defaults to failed calls only; `debug.capture: all` /
+  tool/action name. Redaction is on by default and masks both the auth headers
+  (`Authorization` / `X-XSRF-TOKEN` / `Cookie` / `Set-Cookie`) **and
+  credential-shaped body/query values** (keys matching `token` / `secret` /
+  `password` / `xsrf` / `cookie` / `apiKey` / `sessionId` / …), so a capture of a
+  token-returning endpoint such as `GET /client/token` is safe to share
+  (`debug.redact: false` / `--debug-no-redact` to disable, with a startup
+  warning). Oversized bodies are truncated to keep records bounded. Capture
+  defaults to failed calls only; `debug.capture: all` /
   `--debug-all-calls` captures every call. Purely observational — no new tool, no
   mutating surface, safe in read-only mode. Default (debug off) behaviour is byte
   unchanged.

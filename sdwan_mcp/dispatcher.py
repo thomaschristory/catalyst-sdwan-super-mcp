@@ -39,6 +39,23 @@ _SENSITIVE_HEADERS = frozenset(
 )
 _REDACTED = "<redacted>"
 
+# Body/query keys whose VALUES are credentials and must be masked when redaction
+# is on (#72). Header redaction alone is not enough: several reachable GETs
+# return a live token *in the response body* — e.g. GET /client/token
+# (getCsrfToken) yields {"token": "<live XSRF token>"}, and the cloud-services
+# access-token endpoints do the same. Matched case-insensitively as a substring
+# of the key, so this also catches xsrfToken / sessionId / apiKey etc.
+_SENSITIVE_KEY_RE = re.compile(
+    r"token|secret|password|passwd|passphrase|credential|xsrf|cookie|"
+    r"api[_-]?key|session[_-]?id|authorization|private[_-]?key",
+    re.IGNORECASE,
+)
+
+# Captured bodies are truncated past this many serialized chars so an opt-in
+# debug session can't silently double or overflow a tool result with a large
+# upstream payload (#72).
+_MAX_DEBUG_BODY_CHARS = 20_000
+
 
 def _pick_paginator(style: str | None) -> Paginator | None:
     if style == "scroll":
@@ -415,9 +432,12 @@ class Dispatcher:
 
         Captures exactly what was sent (resolved path, query, the serialized
         body — which is where the ``params``-becomes-body gotcha shows up) and
-        what came back (status, vManage error code, headers, full body). Auth
-        secrets are stripped unless redaction is turned off."""
+        what came back (status, vManage error code, headers, body). When
+        redaction is on, auth headers AND credential-shaped body/query values
+        are masked, and oversized bodies are truncated."""
         redact = self._debug_cfg.redact
+        # error_code is read from the raw body before redaction; the vManage
+        # 'code' key (e.g. REST0001) is not a secret and isn't masked anyway.
         dbg: dict[str, Any] = {
             "tool": tool_name,
             "action": op.action_name,
@@ -427,8 +447,8 @@ class Dispatcher:
                 "method": op.method.upper(),
                 "path": path,
                 "url": f"{self._base_url}{path}",
-                "query_params": dict(query_params),
-                "body": body,
+                "query_params": _redact_data(dict(query_params), redact),
+                "body": _cap_body(_redact_data(body, redact)),
                 "headers": _redact_headers(request_headers, redact),
             },
         }
@@ -441,7 +461,7 @@ class Dispatcher:
                 "status_code": response.status_code,
                 "error_code": _error_code(resp_body) or None,
                 "headers": _redact_headers(dict(response.headers), redact),
-                "body": resp_body,
+                "body": _cap_body(_redact_data(resp_body, redact)),
             }
         return dbg
 
@@ -461,11 +481,7 @@ def _elapsed_ms(started: float) -> float:
 
 
 def _redact_headers(headers: dict[str, str], redact: bool) -> dict[str, str]:
-    """Copy headers, masking auth-bearing ones when ``redact`` is on (#72).
-
-    Auth-headers-only scope: bodies pass through untouched. The vManage call
-    bodies captured here are query DSLs, not credentials — credentials only
-    ride the ``/j_security_check`` login, which the dispatcher never issues."""
+    """Copy headers, masking auth-bearing ones when ``redact`` is on (#72)."""
     out: dict[str, str] = {}
     for key, value in (headers or {}).items():
         if redact and key.lower() in _SENSITIVE_HEADERS:
@@ -473,6 +489,45 @@ def _redact_headers(headers: dict[str, str], redact: bool) -> dict[str, str]:
         else:
             out[key] = value
     return out
+
+
+def _redact_data(obj: Any, redact: bool) -> Any:
+    """Recursively mask values under credential-shaped keys when ``redact`` is on.
+
+    Header redaction alone leaks tokens that vManage returns *in the body*: e.g.
+    GET /client/token (getCsrfToken) — reachable even in read-only mode —
+    responds with ``{"token": "<live XSRF token>"}``. We walk the captured
+    request/response body and query dict and replace the value of any key whose
+    name matches ``_SENSITIVE_KEY_RE`` with ``<redacted>``, so a shared capture
+    can't carry a replayable credential. Non-matching values (the query DSL,
+    error codes, ordinary data) pass through untouched."""
+    if not redact:
+        return obj
+    if isinstance(obj, dict):
+        return {
+            key: (_REDACTED if _SENSITIVE_KEY_RE.search(str(key)) else _redact_data(value, redact))
+            for key, value in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_redact_data(item, redact) for item in obj]
+    return obj
+
+
+def _cap_body(value: Any) -> Any:
+    """Truncate an oversized captured body to keep debug records bounded (#72)."""
+    if value is None:
+        return None
+    try:
+        serialized = json.dumps(value, default=str)
+    except Exception:
+        serialized = str(value)
+    if len(serialized) <= _MAX_DEBUG_BODY_CHARS:
+        return value
+    return {
+        "_truncated": True,
+        "_original_chars": len(serialized),
+        "preview": serialized[:_MAX_DEBUG_BODY_CHARS],
+    }
 
 
 def _error_code(body: Any) -> str:

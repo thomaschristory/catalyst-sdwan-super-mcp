@@ -17,9 +17,9 @@ import respx
 
 from sdwan_mcp.auth import VManageAuth
 from sdwan_mcp.config import DebugConfig, load_config
-from sdwan_mcp.dispatcher import Dispatcher, _redact_headers
+from sdwan_mcp.dispatcher import Dispatcher, _cap_body, _redact_data, _redact_headers
 from sdwan_mcp.loader import SpecLoader
-from sdwan_mcp.server import parse_args
+from sdwan_mcp.server import parse_args, resolve_debug_config
 
 REST0001_BODY = {
     "error": {
@@ -283,3 +283,171 @@ def test_cli_debug_flags_set() -> None:
     assert args.debug is True
     assert args.debug_all_calls is True
     assert args.debug_no_redact is True
+
+
+# ---------------------------------------------------------------------------
+# env-disable semantics (SDWAN_MCP_DEBUG=0/false must yield enabled=False)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["0", "false", "False", "no", "off"])
+def test_debug_env_disable_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """The `if value:` forwarding guard treats "0" as truthy, so disabling
+    relies on pydantic's bool coercion — pin that it actually disables."""
+    monkeypatch.setenv("SDWAN_MCP_DEBUG", value)
+    cfg = load_config(str(tmp_path / "nope.yaml"))
+    assert cfg.debug.enabled is False
+
+
+# ---------------------------------------------------------------------------
+# CLI-over-config merge (resolve_debug_config) — the None-default invariant
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_debug_unset_flags_preserve_config() -> None:
+    base = DebugConfig(enabled=True, capture="all", redact=False)
+    out = resolve_debug_config(base, debug=None, all_calls=None, no_redact=None)
+    assert out == base  # all-None must not override env/YAML state
+
+
+def test_resolve_debug_flag_enables_without_touching_other_fields() -> None:
+    base = DebugConfig(enabled=False, capture="all", redact=True)
+    out = resolve_debug_config(base, debug=True, all_calls=None, no_redact=None)
+    assert out.enabled is True
+    assert out.capture == "all"  # untouched
+    assert out.redact is True
+
+
+def test_resolve_debug_all_and_no_redact_flags() -> None:
+    base = DebugConfig(enabled=True)
+    out = resolve_debug_config(base, debug=None, all_calls=True, no_redact=True)
+    assert out.capture == "all"
+    assert out.redact is False
+
+
+# ---------------------------------------------------------------------------
+# body / query credential scrubbing (#72 review finding — headers aren't enough)
+# ---------------------------------------------------------------------------
+
+
+def test_redact_data_masks_credential_keys() -> None:
+    obj = {"token": "live-xsrf", "data": [{"sessionId": "s"}], "field": "ok"}
+    out = _redact_data(obj, redact=True)
+    assert out["token"] == "<redacted>"
+    assert out["data"][0]["sessionId"] == "<redacted>"
+    assert out["field"] == "ok"  # non-sensitive passes through
+
+
+def test_redact_data_passthrough_when_off() -> None:
+    obj = {"token": "live-xsrf"}
+    assert _redact_data(obj, redact=False) == obj
+
+
+@pytest.mark.asyncio
+async def test_debug_scrubs_token_returning_response_body(specs_dir: Path) -> None:
+    """GET /client/token-style endpoints return a live token in the BODY;
+    redaction must mask it, not just the auth headers."""
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="all"))
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices/count").mock(
+            return_value=httpx.Response(200, json={"token": "LIVE-XSRF-TOKEN"})
+        )
+        result = await d.call("get_device_details_count", {})
+
+    assert isinstance(result, dict)
+    assert result["token"] == "LIVE-XSRF-TOKEN"  # real payload untouched
+    # ...but the captured copy in debug must be scrubbed, and the secret must not
+    # appear anywhere in the serialized debug object.
+    assert result["debug"]["response"]["body"]["token"] == "<redacted>"
+    assert "LIVE-XSRF-TOKEN" not in json.dumps(result["debug"])
+
+
+@pytest.mark.asyncio
+async def test_debug_caps_oversized_body(specs_dir: Path) -> None:
+    big = {"blob": "x" * 50_000}
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices").mock(
+            return_value=httpx.Response(500, json=big)
+        )
+        result = await d.call("get_device_details_devices", {})
+
+    body = result["debug"]["response"]["body"]
+    assert body["_truncated"] is True
+    assert body["_original_chars"] > 20_000
+
+
+def test_cap_body_passes_small_payload() -> None:
+    small = {"a": 1}
+    assert _cap_body(small) is small
+
+
+# ---------------------------------------------------------------------------
+# Set-Cookie response-header redaction (response-only leak surface)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_debug_redacts_response_set_cookie(
+    specs_dir: Path, capsys: pytest.CaptureFixture
+) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices").mock(
+            return_value=httpx.Response(
+                500, json=REST0001_BODY, headers={"Set-Cookie": "JSESSIONID=leakme; Path=/"}
+            )
+        )
+        result = await d.call("get_device_details_devices", {})
+
+    assert isinstance(result, dict)
+    resp_headers = result["debug"]["response"]["headers"]
+    # httpx lowercases header names; the value must be masked either way.
+    assert resp_headers.get("set-cookie", resp_headers.get("Set-Cookie")) == "<redacted>"
+    # the cookie must not leak into the result OR the stderr log
+    assert "leakme" not in json.dumps(result["debug"])
+    assert "leakme" not in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# transport-level failure (httpx.RequestError) capture path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_debug_captures_request_error(specs_dir: Path, capsys: pytest.CaptureFixture) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices/count").mock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+        result = await d.call("get_device_details_count", {})
+
+    assert isinstance(result, dict)
+    assert result["error"] is True
+    dbg = result["debug"]
+    assert "connection refused" in dbg["request_error"]
+    assert "response" not in dbg  # no response was received
+    assert dbg["request"]["method"] == "GET"
+    assert "[dispatcher][debug]" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# capture="all" on an error — failures captured under BOTH modes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_capture_all_still_captures_error_once(specs_dir: Path) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="all"))
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices").mock(
+            return_value=httpx.Response(500, json=REST0001_BODY)
+        )
+        result = await d.call("get_device_details_devices", {})
+
+    assert isinstance(result, dict)
+    assert result["error"] is True
+    assert result["debug"]["response"]["status_code"] == 500

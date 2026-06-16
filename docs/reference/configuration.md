@@ -107,15 +107,26 @@ under `body`.
 
 ### Redaction
 
-With `redact: true` (the default), the auth-bearing headers
-(`Authorization`, `X-XSRF-TOKEN`, `Cookie`, `Set-Cookie`) are replaced with
-`<redacted>` in both the result object and the stderr log, so the output is
-safe to paste into a GitHub issue. Request/response **bodies pass through
-untouched** — the vManage call bodies captured here are query DSLs, not
-credentials (credentials only ride the `/j_security_check` login, which the
-dispatcher never issues). Set `redact: false` only on a trusted local terminal
-when you need to confirm the literal token on the wire; the server prints a
-warning when redaction is off.
+With `redact: true` (the default), captured output is scrubbed in both the
+result object and the stderr log so it is safe to paste into a GitHub issue:
+
+- **Auth headers** — `Authorization`, `X-XSRF-TOKEN`, `Cookie`, `Set-Cookie`
+  (and `Proxy-Authorization`) — are replaced with `<redacted>`.
+- **Credential-shaped body/query values** — the value of any key whose name
+  matches `token` / `secret` / `password` / `xsrf` / `cookie` / `apiKey` /
+  `sessionId` / `credential` / `privateKey` (case-insensitive substring) is
+  replaced with `<redacted>`. This matters because a few reachable GETs return
+  a live token *in the body* — e.g. `GET /client/token` (`getCsrfToken`) yields
+  `{"token": "<live XSRF token>"}` even in read-only mode. The query DSL,
+  vManage error codes, and ordinary data fields pass through untouched.
+
+Set `redact: false` only on a trusted local terminal when you need to confirm
+the literal token on the wire; the server prints a warning when redaction is
+off.
+
+Captured bodies larger than ~20 KB (serialized) are truncated to a
+`{"_truncated": true, "_original_chars": N, "preview": "..."}` marker so an
+opt-in debug session can't silently double or overflow a tool result.
 
 ### Capture scope and response shape
 

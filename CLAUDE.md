@@ -112,8 +112,13 @@ method/path, the **serialized body actually sent** (surfaces the
 `params`-becomes-body shape gotcha), and the full upstream status/`error_code`/
 headers/body, plus timing and tool/action — to the result, and logs the same
 record to stderr as one `[dispatcher][debug] {...}` JSON line. `debug.redact`
-(default on) masks the auth headers only (`Authorization`/`X-XSRF-TOKEN`/
-`Cookie`/`Set-Cookie`); bodies are query DSLs, not secrets, so they pass through.
+(default on) masks the auth headers (`Authorization`/`X-XSRF-TOKEN`/`Cookie`/
+`Set-Cookie`) **and** credential-shaped body/query values (keys matching
+`_SENSITIVE_KEY_RE`: token/secret/password/xsrf/cookie/apiKey/sessionId/…).
+Headers alone are insufficient: reachable GETs like `/client/token`
+(`getCsrfToken`) return a live token *in the body*, so `_redact_data` walks the
+captured request/response body + query and masks those values; the query DSL and
+error codes pass through. Oversized bodies are truncated (`_cap_body`).
 `debug.capture` is `errors` (default; failed calls only) or `all`; on `all`,
 `debug` is attached to dict-shaped successes only — list/str successes go to
 stderr to avoid reshaping the payload. Purely observational: no new tool, no
@@ -487,7 +492,7 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 | Pagination knobs | Config defaults + `_*` reserved params | Server-wide default, per-call override without bloating action params. (#8) |
 | Pagination response shape | Always wrap when paginated (`{data, pagination}`) | Predictable signal to LLM that auto-follow ran. (#8) |
 | Pagination detection | Spec-load time from param names | Cheap, deterministic; response sanity-check covers drift. (#8) |
-| Debug mode | Off-by-default capture of upstream req/resp, attached to result + stderr; redact auth headers only; capture errors-only by default | Stats-DB `REST0001`s were undiagnosable from the client — hints encode guesses, not facts. Captures the serialized body actually sent + full upstream error so failure modes (RBAC scope vs disabled DB vs request shape) can be told apart. Headers-only redaction because vManage call bodies are query DSLs, not secrets. (#72) |
+| Debug mode | Off-by-default capture of upstream req/resp, attached to result + stderr; redact auth headers **and credential-shaped body/query values**; capture errors-only by default | Stats-DB `REST0001`s were undiagnosable from the client — hints encode guesses, not facts. Captures the serialized body actually sent + full upstream error so failure modes (RBAC scope vs disabled DB vs request shape) can be told apart. Body redaction (not just headers) because reachable GETs like `/client/token` return a live token in the body — headers-only would leak it into a capture labelled "safe to share" (adversarial review of #72). (#72) |
 
 ---
 
