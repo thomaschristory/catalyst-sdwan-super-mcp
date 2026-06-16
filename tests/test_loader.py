@@ -9,7 +9,9 @@ import yaml
 
 from sdwan_mcp.loader import (
     DEFAULT_MAX_ACTIONS_PER_TOOL,
+    OperationSpec,
     SpecLoader,
+    ToolGroup,
     _derive_action_name,
 )
 
@@ -110,6 +112,45 @@ def test_loader_keeps_writes_when_read_write(specs_dir: Path) -> None:
 def test_loader_missing_dir_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         SpecLoader(str(tmp_path), "does-not-exist", read_write=True)
+
+
+# ---------------------------------------------------------------------------
+# Cross-tool action-name collisions must not drop/misroute operations (#65)
+# ---------------------------------------------------------------------------
+
+
+def _bare_op(action_name: str, method: str, path: str) -> OperationSpec:
+    return OperationSpec(
+        operation_id=f"{method}{path}",
+        action_name=action_name,
+        summary="",
+        method=method,
+        path=path,
+        tag="t",
+    )
+
+
+def test_build_index_is_tool_scoped_no_cross_tool_drop() -> None:
+    """Two different tools can legitimately derive the same action_name (e.g. a
+    sub-tag split across URL paths produces sibling tools that share a derived
+    name). Per-group dedupe can't see across tools, so the dispatch index must
+    be tool-scoped — otherwise the second op is dropped and the first is
+    misrouted. Regression for #65 (the 3815-ops -> 3523-actions gap)."""
+    group_a = ToolGroup(
+        name="tool_a", display_tag="A", operations=[_bare_op("get_bgp", "get", "/a/bgp")]
+    )
+    group_b = ToolGroup(
+        name="tool_b", display_tag="B", operations=[_bare_op("get_bgp", "get", "/b/bgp")]
+    )
+
+    index = SpecLoader._build_index([group_a, group_b])
+
+    # Each tool resolves its OWN operation — no clobber, no misroute.
+    assert index.by_tool["tool_a"]["get_bgp"].path == "/a/bgp"
+    assert index.by_tool["tool_b"]["get_bgp"].path == "/b/bgp"
+    # No operation silently dropped: every registered op is reachable.
+    total_indexed = sum(len(actions) for actions in index.by_tool.values())
+    assert total_indexed == 2
 
 
 # ---------------------------------------------------------------------------

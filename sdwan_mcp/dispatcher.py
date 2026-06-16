@@ -86,17 +86,23 @@ class Dispatcher:
         """Attach the spec index so the dispatcher can resolve operationIds."""
         self._index = index
 
-    async def call(self, action_name: str, params: dict[str, Any]) -> DispatchResult:
+    async def call(
+        self, action_name: str, params: dict[str, Any], tool_name: str | None = None
+    ) -> DispatchResult:
         """
         Execute an API call for the given derived action name.
 
+        tool_name: the calling tool's name. Action names are unique only within
+                   a tool, so this scopes resolution to that tool's namespace and
+                   prevents a name shared by another tool from misrouting (#65).
+                   Omitted by direct/legacy callers, which resolve flat.
         params: flat dict — dispatcher splits into path / query / body
                 based on the spec definition.
         """
         if self._index is None:
             raise RuntimeError("SpecIndex not set — call set_index() first")
 
-        op = self._index.by_action_name.get(action_name)
+        op = self._index.resolve(action_name, tool_name)
         if op is None:
             return {
                 "error": True,

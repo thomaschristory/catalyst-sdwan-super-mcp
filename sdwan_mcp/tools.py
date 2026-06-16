@@ -112,7 +112,7 @@ def _make_tool_handler(
                     f"Valid actions: {sorted(valid_actions)}"
                 ),
             }
-        return await dispatcher.call(action, params or {})
+        return await dispatcher.call(action, params or {}, tool_name=tool_name)
 
     return tool_handler
 
