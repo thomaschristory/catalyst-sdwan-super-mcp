@@ -31,6 +31,21 @@ docker run -p 8000:8000 \
   --transport sse --host 0.0.0.0 --port 8000
 ```
 
+## Run — streamable-http (network-accessible)
+
+```bash
+docker run -p 8000:8000 \
+  -e VMANAGE_USERNAME=devnetuser \
+  -e VMANAGE_PASSWORD='RG!_Yw919_83' \
+  -v "$(pwd)/specs:/app/specs" \
+  catalyst-sdwan-super-mcp \
+  --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+Same shape as SSE — only the `--transport` value changes. As with SSE, binding a
+non-loopback host (`0.0.0.0`) requires `transport.auth` to be configured, or the
+server demotes the bind to loopback at startup.
+
 ## docker-compose
 
 ```bash
