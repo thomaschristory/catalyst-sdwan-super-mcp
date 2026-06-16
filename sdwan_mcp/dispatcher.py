@@ -12,21 +12,49 @@ Handles:
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import re
+import sys
+import time
 from typing import Any, TypeAlias
 from urllib.parse import quote
 
 import httpx
 
 from .auth import VManageAuth
-from .config import PaginationConfig, RetryConfig
+from .config import DebugConfig, PaginationConfig, RetryConfig
 from .loader import OperationSpec, SpecIndex
 from .pagination import OffsetPaginator, Paginator, ScrollPaginator
 
 _MUTATING_METHODS = frozenset({"post", "put", "delete", "patch"})
 
 _RESERVED_PAGINATION_KEYS = ("_pagination", "_max_pages", "_page_size")
+
+# Headers whose values are auth secrets — redacted from debug capture by
+# default (#72). Compared case-insensitively. Covers both request-side
+# (Authorization / X-XSRF-TOKEN / Cookie) and response-side (Set-Cookie).
+_SENSITIVE_HEADERS = frozenset(
+    {"authorization", "x-xsrf-token", "cookie", "set-cookie", "proxy-authorization"}
+)
+_REDACTED = "<redacted>"
+
+# Body/query keys whose VALUES are credentials and must be masked when redaction
+# is on (#72). Header redaction alone is not enough: several reachable GETs
+# return a live token *in the response body* — e.g. GET /client/token
+# (getCsrfToken) yields {"token": "<live XSRF token>"}, and the cloud-services
+# access-token endpoints do the same. Matched case-insensitively as a substring
+# of the key, so this also catches xsrfToken / sessionId / apiKey etc.
+_SENSITIVE_KEY_RE = re.compile(
+    r"token|secret|password|passwd|passphrase|credential|xsrf|cookie|"
+    r"api[_-]?key|session[_-]?id|authorization|private[_-]?key",
+    re.IGNORECASE,
+)
+
+# Captured bodies are truncated past this many serialized chars so an opt-in
+# debug session can't silently double or overflow a tool result with a large
+# upstream payload (#72).
+_MAX_DEBUG_BODY_CHARS = 20_000
 
 
 def _pick_paginator(style: str | None) -> Paginator | None:
@@ -49,12 +77,14 @@ class Dispatcher:
         timeout: float = 30.0,
         pagination: PaginationConfig | None = None,
         retry: RetryConfig | None = None,
+        debug: DebugConfig | None = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._auth = auth
         self._index: SpecIndex | None = None
         self._pagination_cfg = pagination or PaginationConfig()
         self._retry_cfg = retry or RetryConfig()
+        self._debug_cfg = debug or DebugConfig()
 
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -112,14 +142,14 @@ class Dispatcher:
                 ),
             }
 
-        return await self._execute_with_retry(op, params)
+        return await self._execute_with_retry(op, params, tool_name)
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
     async def _execute_with_retry(
-        self, op: OperationSpec, params: dict[str, Any]
+        self, op: OperationSpec, params: dict[str, Any], tool_name: str | None = None
     ) -> DispatchResult:
         """
         Proactively refresh token, route through a paginator if applicable,
@@ -137,7 +167,7 @@ class Dispatcher:
         )
 
         if paginator is None:
-            response = await self._execute_one_with_retry(op, clean_params)
+            response = await self._execute_one_with_retry(op, clean_params, tool_name)
             return response
 
         max_pages_override = overrides.get("max_pages")
@@ -153,26 +183,34 @@ class Dispatcher:
             else self._pagination_cfg.page_size
         )
 
+        # Bind tool_name into the per-page executor the paginator drives, so
+        # captured debug records carry the calling tool without widening the
+        # Paginator.paginate(op, params, fn) contract.
+        async def _run_page(o: OperationSpec, p: dict[str, Any]) -> DispatchResult:
+            return await self._execute_one_with_retry(o, p, tool_name)
+
         return await paginator.paginate(
             op,
             clean_params,
-            self._execute_one_with_retry,
+            _run_page,
             max_pages=max_pages,
             page_size=page_size,
         )
 
     async def _execute_one_with_retry(
-        self, op: OperationSpec, params: dict[str, Any]
+        self, op: OperationSpec, params: dict[str, Any], tool_name: str | None = None
     ) -> DispatchResult:
         """One request with the existing session-expiry retry behaviour."""
-        response = await self._execute(op, params)
+        response = await self._execute(op, params, tool_name)
         if isinstance(response, dict) and response.get("_session_expired"):
             print("[dispatcher] Session expired unexpectedly — re-authenticating")
             await self._auth.login(self._client)
-            response = await self._execute(op, params)
+            response = await self._execute(op, params, tool_name)
         return response
 
-    async def _execute(self, op: OperationSpec, raw_params: dict[str, Any]) -> DispatchResult:
+    async def _execute(
+        self, op: OperationSpec, raw_params: dict[str, Any], tool_name: str | None = None
+    ) -> DispatchResult:
         # Split params by location
         path_param_names = {p.name for p in op.parameters if p.location == "path"}
         query_param_names = {p.name for p in op.parameters if p.location == "query"}
@@ -227,25 +265,47 @@ class Dispatcher:
             **self._auth.headers(),
         }
 
+        sent_body = body_params if body_params else None
+        debug_on = self._debug_cfg.enabled
+        started = time.monotonic()
+
         try:
             response = await self._send_with_retry(
                 method=op.method.upper(),
                 url=url,
                 params=query_params or None,
-                json=body_params if body_params else None,
+                json=sent_body,
                 headers=headers,
                 retryable=self._is_retryable(op.method),
             )
         except httpx.RequestError as e:
-            return {"error": True, "message": f"Request failed: {e}"}
+            result: dict[str, Any] = {"error": True, "message": f"Request failed: {e}"}
+            if debug_on:
+                dbg = self._build_debug(
+                    op,
+                    tool_name,
+                    url,
+                    query_params,
+                    sent_body,
+                    headers,
+                    response=None,
+                    elapsed_ms=_elapsed_ms(started),
+                    request_error=str(e),
+                )
+                self._emit_debug(dbg)
+                result["debug"] = dbg
+            return result
 
-        # Detect session expiry — signal caller to re-auth
+        # Detect session expiry — signal caller to re-auth. This is an internal
+        # round we retry transparently, so it is intentionally not captured.
         if self._auth.is_session_expired(response):
             return {"_session_expired": True}
 
+        elapsed_ms = _elapsed_ms(started)
+
         if response.is_error:
             body = _safe_json(response)
-            result: dict[str, Any] = {
+            result = {
                 "error": True,
                 "status_code": response.status_code,
                 "message": f"HTTP {response.status_code}",
@@ -254,9 +314,43 @@ class Dispatcher:
             hint = _stats_db_hint(op, response.status_code, body)
             if hint:
                 result["hint"] = hint
+            # A failed upstream call is captured under BOTH capture modes —
+            # diagnosing failures is the whole point of debug mode (#72).
+            if debug_on:
+                dbg = self._build_debug(
+                    op,
+                    tool_name,
+                    url,
+                    query_params,
+                    sent_body,
+                    headers,
+                    response=response,
+                    elapsed_ms=elapsed_ms,
+                )
+                self._emit_debug(dbg)
+                result["debug"] = dbg
             return result
 
-        return _safe_json(response)
+        data = _safe_json(response)
+        if debug_on and self._debug_cfg.capture == "all":
+            dbg = self._build_debug(
+                op,
+                tool_name,
+                url,
+                query_params,
+                sent_body,
+                headers,
+                response=response,
+                elapsed_ms=elapsed_ms,
+            )
+            self._emit_debug(dbg)
+            # Only dict results can carry the debug object without reshaping the
+            # payload; list/str successes are logged to stderr only (honest, no
+            # silent wrapping that would confuse the LLM consumer).
+            if isinstance(data, dict) and "debug" not in data:
+                data = {**data, "debug": dbg}
+
+        return data
 
     # ------------------------------------------------------------------
     # Transport-level retry
@@ -317,10 +411,123 @@ class Dispatcher:
         delay = half + random.uniform(0, half)
         await asyncio.sleep(delay)
 
+    # ------------------------------------------------------------------
+    # Debug capture (#72)
+    # ------------------------------------------------------------------
+
+    def _build_debug(
+        self,
+        op: OperationSpec,
+        tool_name: str | None,
+        path: str,
+        query_params: dict[str, Any],
+        body: dict[str, Any] | None,
+        request_headers: dict[str, str],
+        *,
+        response: httpx.Response | None,
+        elapsed_ms: float,
+        request_error: str | None = None,
+    ) -> dict[str, Any]:
+        """Assemble the structured ``debug`` record for one upstream exchange.
+
+        Captures exactly what was sent (resolved path, query, the serialized
+        body — which is where the ``params``-becomes-body gotcha shows up) and
+        what came back (status, vManage error code, headers, body). When
+        redaction is on, auth headers AND credential-shaped body/query values
+        are masked, and oversized bodies are truncated."""
+        redact = self._debug_cfg.redact
+        # error_code is read from the raw body before redaction; the vManage
+        # 'code' key (e.g. REST0001) is not a secret and isn't masked anyway.
+        dbg: dict[str, Any] = {
+            "tool": tool_name,
+            "action": op.action_name,
+            "operation_id": op.operation_id,
+            "timing_ms": round(elapsed_ms, 1),
+            "request": {
+                "method": op.method.upper(),
+                "path": path,
+                "url": f"{self._base_url}{path}",
+                "query_params": _redact_data(dict(query_params), redact),
+                "body": _cap_body(_redact_data(body, redact)),
+                "headers": _redact_headers(request_headers, redact),
+            },
+        }
+        if request_error is not None:
+            dbg["request_error"] = request_error
+            return dbg
+        if response is not None:
+            resp_body = _safe_json(response)
+            dbg["response"] = {
+                "status_code": response.status_code,
+                "error_code": _error_code(resp_body) or None,
+                "headers": _redact_headers(dict(response.headers), redact),
+                "body": _cap_body(_redact_data(resp_body, redact)),
+            }
+        return dbg
+
+    def _emit_debug(self, dbg: dict[str, Any]) -> None:
+        """Log one redacted debug record to stderr as a single JSON line."""
+        print(f"[dispatcher][debug] {json.dumps(dbg, default=str)}", file=sys.stderr)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _elapsed_ms(started: float) -> float:
+    """Milliseconds elapsed since a ``time.monotonic()`` mark."""
+    return (time.monotonic() - started) * 1000.0
+
+
+def _redact_headers(headers: dict[str, str], redact: bool) -> dict[str, str]:
+    """Copy headers, masking auth-bearing ones when ``redact`` is on (#72)."""
+    out: dict[str, str] = {}
+    for key, value in (headers or {}).items():
+        if redact and key.lower() in _SENSITIVE_HEADERS:
+            out[key] = _REDACTED
+        else:
+            out[key] = value
+    return out
+
+
+def _redact_data(obj: Any, redact: bool) -> Any:
+    """Recursively mask values under credential-shaped keys when ``redact`` is on.
+
+    Header redaction alone leaks tokens that vManage returns *in the body*: e.g.
+    GET /client/token (getCsrfToken) — reachable even in read-only mode —
+    responds with ``{"token": "<live XSRF token>"}``. We walk the captured
+    request/response body and query dict and replace the value of any key whose
+    name matches ``_SENSITIVE_KEY_RE`` with ``<redacted>``, so a shared capture
+    can't carry a replayable credential. Non-matching values (the query DSL,
+    error codes, ordinary data) pass through untouched."""
+    if not redact:
+        return obj
+    if isinstance(obj, dict):
+        return {
+            key: (_REDACTED if _SENSITIVE_KEY_RE.search(str(key)) else _redact_data(value, redact))
+            for key, value in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_redact_data(item, redact) for item in obj]
+    return obj
+
+
+def _cap_body(value: Any) -> Any:
+    """Truncate an oversized captured body to keep debug records bounded (#72)."""
+    if value is None:
+        return None
+    try:
+        serialized = json.dumps(value, default=str)
+    except Exception:
+        serialized = str(value)
+    if len(serialized) <= _MAX_DEBUG_BODY_CHARS:
+        return value
+    return {
+        "_truncated": True,
+        "_original_chars": len(serialized),
+        "preview": serialized[:_MAX_DEBUG_BODY_CHARS],
+    }
 
 
 def _error_code(body: Any) -> str:

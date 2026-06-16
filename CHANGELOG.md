@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Debug mode for capturing the upstream vManage request/response (#72).** A new
+  off-by-default toggle (`debug.enabled` / `SDWAN_MCP_DEBUG=1` / `--debug`) makes
+  the dispatcher attach a structured, redacted `debug` object to a tool result and
+  log the same record to stderr, so opaque upstream errors — most notably the
+  persistent `REST0001` 500s on the statistics-database query tools (#56, #62) —
+  can be diagnosed from the *facts of the exchange* rather than inferred from a
+  hint. The record carries the resolved method/path, the **exact serialized
+  request body actually sent** (where the `params`-becomes-body shape gotcha shows
+  up), and the full upstream status/`error_code`/headers/body, plus timing and the
+  tool/action name. Redaction is on by default and masks both the auth headers
+  (`Authorization` / `X-XSRF-TOKEN` / `Cookie` / `Set-Cookie`) **and
+  credential-shaped body/query values** (keys matching `token` / `secret` /
+  `password` / `xsrf` / `cookie` / `apiKey` / `sessionId` / …), so a capture of a
+  token-returning endpoint such as `GET /client/token` is safe to share
+  (`debug.redact: false` / `--debug-no-redact` to disable, with a startup
+  warning). Oversized bodies are truncated to keep records bounded. Capture
+  defaults to failed calls only; `debug.capture: all` /
+  `--debug-all-calls` captures every call. Purely observational — no new tool, no
+  mutating surface, safe in read-only mode. Default (debug off) behaviour is byte
+  unchanged.
+
 ## [0.4.2] - 2026-06-16
 
 Closes the [v0.4.2 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/8) (#65, #64).

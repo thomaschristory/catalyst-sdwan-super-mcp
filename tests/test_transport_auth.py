@@ -178,6 +178,9 @@ def _make_args(config_path: Path, *, insecure: bool = False) -> argparse.Namespa
         diff=None,
         max_actions_per_tool=None,
         insecure_allow_public=insecure,
+        debug=None,
+        debug_all_calls=None,
+        debug_no_redact=None,
     )
 
 

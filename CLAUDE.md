@@ -102,6 +102,29 @@ The trade-off is accepted because the alternative (no signal) leaves stats broke
 if a future spec renames a `get*` stats read, it would silently fall out of RO mode
 rather than mis-expose a write — fail-safe, not fail-open.
 
+### Debug mode (#72)
+
+Off-by-default capture of the upstream vManage exchange, for diagnosing opaque
+errors (the persistent stats-DB `REST0001` 500s) from facts rather than hints.
+Toggle via `debug.enabled` (`SDWAN_MCP_DEBUG=1` / `--debug`). When on,
+`dispatcher._execute()` attaches a structured `debug` object — resolved
+method/path, the **serialized body actually sent** (surfaces the
+`params`-becomes-body shape gotcha), and the full upstream status/`error_code`/
+headers/body, plus timing and tool/action — to the result, and logs the same
+record to stderr as one `[dispatcher][debug] {...}` JSON line. `debug.redact`
+(default on) masks the auth headers (`Authorization`/`X-XSRF-TOKEN`/`Cookie`/
+`Set-Cookie`) **and** credential-shaped body/query values (keys matching
+`_SENSITIVE_KEY_RE`: token/secret/password/xsrf/cookie/apiKey/sessionId/…).
+Headers alone are insufficient: reachable GETs like `/client/token`
+(`getCsrfToken`) return a live token *in the body*, so `_redact_data` walks the
+captured request/response body + query and masks those values; the query DSL and
+error codes pass through. Oversized bodies are truncated (`_cap_body`).
+`debug.capture` is `errors` (default; failed calls only) or `all`; on `all`,
+`debug` is attached to dict-shaped successes only — list/str successes go to
+stderr to avoid reshaping the payload. Purely observational: no new tool, no
+mutating surface, RO-safe. The session-expiry internal retry round is not
+captured. Env/CLI mapping mirrors the VMANAGE_* pattern (`_DebugEnvSource`).
+
 ---
 
 ## Authentication
@@ -245,7 +268,13 @@ sdwan-mcp --version 20.15                          # override spec version
 sdwan-mcp --max-actions-per-tool 50                # smaller, more numerous tools
 sdwan-mcp --diff 20.15 20.18                       # diff two versions and exit
 sdwan-mcp --config /path/to/sdwan-mcp.yaml            # custom config file
+sdwan-mcp --debug                                  # capture upstream req/resp on failures (#72)
+sdwan-mcp --debug --debug-all-calls --debug-no-redact  # verbose, every call, no header redaction
 ```
+
+The `--debug*` flags default to `None` (not `False`) so an unset flag never
+overrides an env/YAML `debug.*` setting — only an explicitly passed flag wins,
+preserving the CLI > env > YAML precedence used everywhere else.
 
 The `catalyst-sdwan-super-mcp` script name is also registered if you prefer the long form.
 
@@ -463,6 +492,7 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 | Pagination knobs | Config defaults + `_*` reserved params | Server-wide default, per-call override without bloating action params. (#8) |
 | Pagination response shape | Always wrap when paginated (`{data, pagination}`) | Predictable signal to LLM that auto-follow ran. (#8) |
 | Pagination detection | Spec-load time from param names | Cheap, deterministic; response sanity-check covers drift. (#8) |
+| Debug mode | Off-by-default capture of upstream req/resp, attached to result + stderr; redact auth headers **and credential-shaped body/query values**; capture errors-only by default | Stats-DB `REST0001`s were undiagnosable from the client — hints encode guesses, not facts. Captures the serialized body actually sent + full upstream error so failure modes (RBAC scope vs disabled DB vs request shape) can be told apart. Body redaction (not just headers) because reachable GETs like `/client/token` return a live token in the body — headers-only would leak it into a capture labelled "safe to share" (adversarial review of #72). (#72) |
 
 ---
 

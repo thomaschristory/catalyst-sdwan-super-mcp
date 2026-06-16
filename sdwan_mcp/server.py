@@ -29,7 +29,7 @@ from starlette.middleware import Middleware
 
 from . import __version__
 from .auth import VManageAuth, require_credentials
-from .config import DEFAULT_CONFIG_PATH, AppConfig, load_config
+from .config import DEFAULT_CONFIG_PATH, AppConfig, DebugConfig, load_config
 from .diff import diff_versions, print_diff
 from .dispatcher import Dispatcher
 from .fetcher import (
@@ -123,6 +123,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Allow binding to a non-loopback host with transport.auth.type=none. "
             "Without this flag, such a bind is auto-demoted to 127.0.0.1."
+        ),
+    )
+    # Debug capture (#72). default=None so an unset flag does NOT override an
+    # env/YAML setting — only an explicitly passed flag takes precedence.
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=None,
+        help=(
+            "Capture the upstream vManage request/response on failed calls and "
+            "surface it as a redacted 'debug' object in the tool result + stderr. "
+            "Also via SDWAN_MCP_DEBUG=1. Off by default; observational only."
+        ),
+    )
+    parser.add_argument(
+        "--debug-all-calls",
+        action="store_true",
+        default=None,
+        help="With --debug: capture every call, not just failures (verbose).",
+    )
+    parser.add_argument(
+        "--debug-no-redact",
+        action="store_true",
+        default=None,
+        help=(
+            "With --debug: do NOT strip auth headers from captured output. "
+            "Only use on a trusted local terminal — output may contain tokens."
         ),
     )
     return parser.parse_args(argv)
@@ -278,6 +305,29 @@ def run_list_versions(argv: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
+def resolve_debug_config(
+    base: DebugConfig,
+    *,
+    debug: bool | None,
+    all_calls: bool | None,
+    no_redact: bool | None,
+) -> DebugConfig:
+    """Layer the CLI debug flags over the env/YAML-derived ``DebugConfig``.
+
+    Each flag defaults to ``None`` (not ``False``), so an *unset* flag leaves
+    the env/YAML value intact — only an explicitly-passed flag overrides it,
+    preserving the CLI > env > YAML > defaults precedence used everywhere else.
+    """
+    overrides: dict[str, object] = {}
+    if debug:
+        overrides["enabled"] = True
+    if all_calls:
+        overrides["capture"] = "all"
+    if no_redact:
+        overrides["redact"] = False
+    return base.model_copy(update=overrides) if overrides else base
+
+
 def _warn_if_tls_unverified(config: AppConfig) -> None:
     """Loudly warn (stderr) when vManage TLS verification is off (#55 H1).
 
@@ -346,6 +396,25 @@ async def _connect_and_register(
         print(f"[server] Listening on : {host}:{port}")
     print()
 
+    # Layer CLI debug flags over the env/YAML-derived DebugConfig (CLI wins).
+    debug_cfg = resolve_debug_config(
+        config.debug,
+        debug=args.debug,
+        all_calls=args.debug_all_calls,
+        no_redact=args.debug_no_redact,
+    )
+    if debug_cfg.enabled:
+        print(
+            f"[server] Debug      : ON (capture={debug_cfg.capture}, "
+            f"redact={'on' if debug_cfg.redact else 'OFF'})"
+        )
+        if not debug_cfg.redact:
+            print(
+                "[server] WARNING: debug redaction is OFF — captured output may "
+                "contain auth tokens. Do not share these logs.",
+                file=sys.stderr,
+            )
+
     max_actions = (
         args.max_actions_per_tool
         if args.max_actions_per_tool is not None
@@ -399,6 +468,7 @@ async def _connect_and_register(
         timeout=config.vmanage.timeout,
         pagination=config.sdwan.pagination,
         retry=config.vmanage.retries,
+        debug=debug_cfg,
     )
     dispatcher.set_index(index)
     await dispatcher.connect()
