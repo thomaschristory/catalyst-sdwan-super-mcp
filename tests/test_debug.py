@@ -365,6 +365,27 @@ async def test_debug_scrubs_token_returning_response_body(specs_dir: Path) -> No
 
 
 @pytest.mark.asyncio
+async def test_debug_redaction_is_scoped_to_capture_not_data_plane(specs_dir: Path) -> None:
+    """Redaction scope is the *debug capture*, not the primary result body.
+
+    The server proxies vManage: the raw response body is the data the caller
+    requested and is returned untouched (pre-existing behaviour). Only the
+    shareable `debug` copy of that exchange is scrubbed. This pins that
+    intentional boundary so a future change doesn't silently start mangling
+    the data plane (or stop scrubbing the capture)."""
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://vm.test:8443/dataservice/devices").mock(
+            return_value=httpx.Response(500, json={"token": "LIVE-TOKEN", "error": {"code": "X"}})
+        )
+        result = await d.call("get_device_details_devices", {})
+
+    assert isinstance(result, dict)
+    assert result["body"]["token"] == "LIVE-TOKEN"  # data plane: untouched
+    assert result["debug"]["response"]["body"]["token"] == "<redacted>"  # capture: scrubbed
+
+
+@pytest.mark.asyncio
 async def test_debug_caps_oversized_body(specs_dir: Path) -> None:
     big = {"blob": "x" * 50_000}
     d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))

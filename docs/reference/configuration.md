@@ -107,8 +107,17 @@ under `body`.
 
 ### Redaction
 
-With `redact: true` (the default), captured output is scrubbed in both the
-result object and the stderr log so it is safe to paste into a GitHub issue:
+Redaction applies to the **`debug` capture** — the `debug` object added to the
+result and the `[dispatcher][debug]` stderr line — which is the diagnostic
+artifact you paste into a GitHub issue. It does **not** touch the primary tool
+result (e.g. `result["body"]` on an error): that is the data the caller asked
+for and the server returns it raw, exactly as it has always done, debug on or
+off. So if you deliberately call a token-returning endpoint, its token is still
+in the primary result — but the *shareable debug capture* of that exchange is
+scrubbed.
+
+With `redact: true` (the default), the captured `debug` object and its stderr
+line are scrubbed so they are safe to share:
 
 - **Auth headers** — `Authorization`, `X-XSRF-TOKEN`, `Cookie`, `Set-Cookie`
   (and `Proxy-Authorization`) — are replaced with `<redacted>`.
