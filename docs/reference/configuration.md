@@ -41,6 +41,11 @@ sdwan:
   max_actions_per_tool: 150         # default: 150. Cap before splitting; 0 disables splitting. See guides/tool-splitting.md
   auto_fetch: true                  # default: true. If specs/<active_version>/ is missing, fetch from developer.cisco.com on startup.
 
+debug:
+  enabled: false                    # default: false. Capture upstream request/response on failure.
+  redact: true                      # default: true. Strip auth headers from captured output.
+  capture: errors                   # default: errors. Options: errors | all.
+
 transport:
   mode: stdio                       # default: stdio. Options: stdio | sse | streamable-http
   host: 127.0.0.1                   # default. Bind address for HTTP transports.
@@ -49,6 +54,77 @@ transport:
     type: none                      # default: none. Options: none | bearer
     token: ""                       # required when type: bearer. Supports ${ENV_VAR}.
 ```
+
+## `debug` — capture the upstream vManage exchange (#72)
+
+Debug mode is **off by default and changes nothing when off**. Turning it on
+makes the dispatcher attach a structured `debug` object to tool results and
+log the same record to stderr, so you can see exactly what was sent to and
+returned by vManage. It is the way to diagnose opaque upstream errors — most
+notably the `REST0001` 500s the statistics-database query tools return — by
+capturing the *facts of the exchange* instead of inferring from a hint.
+
+It is purely observational: it adds no new tool and no mutating surface, so it
+is safe to enable in read-only mode.
+
+| Key       | Type   | Default    | Description                                                                 |
+|-----------|--------|------------|-----------------------------------------------------------------------------|
+| `enabled` | bool   | `false`    | Master switch. Also `SDWAN_MCP_DEBUG=1` or `--debug`.                        |
+| `redact`  | bool   | `true`     | Strip `Authorization` / `X-XSRF-TOKEN` / `Cookie` / `Set-Cookie` headers. `SDWAN_MCP_DEBUG_REDACT=0` / `--debug-no-redact`. |
+| `capture` | string | `errors`   | `errors` = failed calls only; `all` = every call. `SDWAN_MCP_DEBUG_CAPTURE` / `--debug-all-calls`. |
+
+### What gets captured
+
+For a failed call (and for every call under `capture: all`):
+
+```jsonc
+{
+  "tool": "monitoring_bfd",
+  "action": "post_bfd_doccount",
+  "operation_id": "...",          // Cisco's operationId, for cross-referencing the spec
+  "timing_ms": 142.7,
+  "request": {
+    "method": "POST",
+    "path": "/statistics/bfd/doccount",
+    "url": "https://vmanage.example:443/dataservice/statistics/bfd/doccount",
+    "query_params": {},
+    "body": { "query": { "condition": "AND", "rules": [ ... ] } },  // the serialized body actually sent
+    "headers": { "Authorization": "<redacted>", "X-XSRF-TOKEN": "<redacted>", "Content-Type": "application/json" }
+  },
+  "response": {
+    "status_code": 500,
+    "error_code": "REST0001",
+    "headers": { ... },
+    "body": { "error": { "message": "Server error", "code": "REST0001", "details": "..." } }
+  }
+}
+```
+
+The `request.body` is the exact payload sent upstream — this is where the
+request-shape gotcha shows up: tool `params` are forwarded straight through as
+the HTTP body, so a `query` payload must sit at the **top level**, not nested
+under `body`.
+
+### Redaction
+
+With `redact: true` (the default), the auth-bearing headers
+(`Authorization`, `X-XSRF-TOKEN`, `Cookie`, `Set-Cookie`) are replaced with
+`<redacted>` in both the result object and the stderr log, so the output is
+safe to paste into a GitHub issue. Request/response **bodies pass through
+untouched** — the vManage call bodies captured here are query DSLs, not
+credentials (credentials only ride the `/j_security_check` login, which the
+dispatcher never issues). Set `redact: false` only on a trusted local terminal
+when you need to confirm the literal token on the wire; the server prints a
+warning when redaction is off.
+
+### Capture scope and response shape
+
+- `capture: errors` (default) attaches `debug` only to failed upstream calls.
+- `capture: all` also attaches `debug` to successful calls **when the response
+  is a JSON object**. A successful list- or string-shaped response is returned
+  verbatim (no silent wrapping) and its debug record is written to stderr only.
+- Either way, every captured record is logged to stderr as a single
+  `[dispatcher][debug] {...}` JSON line.
 
 ## `transport.auth` — HTTP transport authentication
 
@@ -102,6 +178,9 @@ on every request.
 |---|---|
 | `VMANAGE_USERNAME` | `${VMANAGE_USERNAME}` in `sdwan-mcp.yaml` |
 | `VMANAGE_PASSWORD` | `${VMANAGE_PASSWORD}` in `sdwan-mcp.yaml` |
+| `SDWAN_MCP_DEBUG` | `debug.enabled` — `1`/`true` turns debug capture on |
+| `SDWAN_MCP_DEBUG_REDACT` | `debug.redact` — `0`/`false` disables header redaction |
+| `SDWAN_MCP_DEBUG_CAPTURE` | `debug.capture` — `errors` or `all` |
 
 `.env` is auto-loaded if present (via `python-dotenv`).
 

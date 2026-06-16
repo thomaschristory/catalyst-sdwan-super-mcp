@@ -125,6 +125,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Without this flag, such a bind is auto-demoted to 127.0.0.1."
         ),
     )
+    # Debug capture (#72). default=None so an unset flag does NOT override an
+    # env/YAML setting — only an explicitly passed flag takes precedence.
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=None,
+        help=(
+            "Capture the upstream vManage request/response on failed calls and "
+            "surface it as a redacted 'debug' object in the tool result + stderr. "
+            "Also via SDWAN_MCP_DEBUG=1. Off by default; observational only."
+        ),
+    )
+    parser.add_argument(
+        "--debug-all-calls",
+        action="store_true",
+        default=None,
+        help="With --debug: capture every call, not just failures (verbose).",
+    )
+    parser.add_argument(
+        "--debug-no-redact",
+        action="store_true",
+        default=None,
+        help=(
+            "With --debug: do NOT strip auth headers from captured output. "
+            "Only use on a trusted local terminal — output may contain tokens."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -346,6 +373,29 @@ async def _connect_and_register(
         print(f"[server] Listening on : {host}:{port}")
     print()
 
+    # Layer CLI debug flags over the env/YAML-derived DebugConfig (CLI wins).
+    debug_cfg = config.debug
+    debug_overrides: dict[str, object] = {}
+    if args.debug:
+        debug_overrides["enabled"] = True
+    if args.debug_all_calls:
+        debug_overrides["capture"] = "all"
+    if args.debug_no_redact:
+        debug_overrides["redact"] = False
+    if debug_overrides:
+        debug_cfg = debug_cfg.model_copy(update=debug_overrides)
+    if debug_cfg.enabled:
+        print(
+            f"[server] Debug      : ON (capture={debug_cfg.capture}, "
+            f"redact={'on' if debug_cfg.redact else 'OFF'})"
+        )
+        if not debug_cfg.redact:
+            print(
+                "[server] WARNING: debug redaction is OFF — captured output may "
+                "contain auth tokens. Do not share these logs.",
+                file=sys.stderr,
+            )
+
     max_actions = (
         args.max_actions_per_tool
         if args.max_actions_per_tool is not None
@@ -399,6 +449,7 @@ async def _connect_and_register(
         timeout=config.vmanage.timeout,
         pagination=config.sdwan.pagination,
         retry=config.vmanage.retries,
+        debug=debug_cfg,
     )
     dispatcher.set_index(index)
     await dispatcher.connect()

@@ -25,6 +25,15 @@ sdwan:
     max_pages: 5
     page_size: null
 
+debug:
+  # Capture the exact upstream vManage request/response when a call fails, so
+  # opaque errors (e.g. REST0001 on the statistics-DB queries) can be diagnosed
+  # rather than guessed at. Off by default; observational only (no new mutating
+  # surface, safe in read-only mode). See docs/reference/configuration.md.
+  enabled: false             # SDWAN_MCP_DEBUG=1 / --debug
+  redact: true               # strip auth headers from captured output; SDWAN_MCP_DEBUG_REDACT=0 / --debug-no-redact to disable
+  capture: errors            # "errors" (failed calls only) | "all"; SDWAN_MCP_DEBUG_CAPTURE / --debug-all-calls
+
 transport:
   mode: stdio                       # stdio | sse | streamable-http
   host: 127.0.0.1

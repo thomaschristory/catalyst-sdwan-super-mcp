@@ -109,6 +109,27 @@ class PaginationConfig(_Base):
     page_size: int | None = None
 
 
+class DebugConfig(_Base):
+    """Verbose capture of the upstream vManage request/response (#72).
+
+    Off by default — enabling it never changes default behaviour, it only
+    *adds* a redacted ``debug`` object to tool results and a stderr log line.
+    Purely observational: it introduces no new mutating surface, so it is
+    safe in read-only mode.
+    """
+
+    # Master switch. Env: SDWAN_MCP_DEBUG, CLI: --debug.
+    enabled: bool = False
+    # Strip auth headers (Authorization / X-XSRF-TOKEN / Cookie / Set-Cookie)
+    # from captured output so logs are safe to paste into an issue. Env:
+    # SDWAN_MCP_DEBUG_REDACT=0, CLI: --debug-no-redact.
+    redact: bool = True
+    # Which calls to capture: "errors" (default — only failed upstream calls,
+    # matching #72's acceptance) or "all". Env: SDWAN_MCP_DEBUG_CAPTURE,
+    # CLI: --debug-all-calls.
+    capture: Literal["errors", "all"] = "errors"
+
+
 class SDWANConfig(_Base):
     specs_dir: str = "./specs"
     active_version: str = "20.18"
@@ -185,12 +206,40 @@ class _VManageEnvSource(PydanticBaseSettingsSource):
         return {"vmanage": vmanage} if vmanage else {}
 
 
+class _DebugEnvSource(PydanticBaseSettingsSource):
+    """Maps the ``SDWAN_MCP_DEBUG*`` env vars onto ``debug.*``.
+
+    Mirrors ``_VManageEnvSource``: these take precedence over the YAML file so
+    debug can be flipped on per-environment without editing config. Empty/unset
+    values are ignored so they don't clobber YAML/defaults. pydantic coerces the
+    string values ("1"/"0"/"true"/"false") to bool, and validates ``capture``
+    against the Literal."""
+
+    _MAP: ClassVar[dict[str, str]] = {
+        "SDWAN_MCP_DEBUG": "enabled",
+        "SDWAN_MCP_DEBUG_REDACT": "redact",
+        "SDWAN_MCP_DEBUG_CAPTURE": "capture",
+    }
+
+    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        debug: dict[str, Any] = {}
+        for env_name, field in self._MAP.items():
+            value = os.environ.get(env_name)
+            if value:  # ignore unset and empty — let YAML/defaults stand
+                debug[field] = value
+        return {"debug": debug} if debug else {}
+
+
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
 
     vmanage: VManageConfig = Field(default_factory=VManageConfig)
     sdwan: SDWANConfig = Field(default_factory=SDWANConfig)
     transport: TransportConfig = Field(default_factory=TransportConfig)
+    debug: DebugConfig = Field(default_factory=DebugConfig)
 
     @model_validator(mode="before")
     @classmethod
@@ -210,10 +259,11 @@ class AppConfig(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Priority: init kwargs > flat VMANAGE_* env > YAML file > defaults.
+        # Priority: init kwargs > flat VMANAGE_*/SDWAN_MCP_DEBUG* env > YAML > defaults.
         return (
             init_settings,
             _VManageEnvSource(settings_cls),
+            _DebugEnvSource(settings_cls),
             _YamlSource(settings_cls),
         )
 
