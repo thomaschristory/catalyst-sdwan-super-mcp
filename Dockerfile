@@ -57,4 +57,11 @@ CMD []
 #     -e VMANAGE_PASSWORD=secret \
 #     -v $(pwd)/specs:/app/specs \
 #     catalyst-sdwan-super-mcp --transport sse --host 0.0.0.0 --port 8000
+#
+# Network (streamable-http):
+#   docker run -p 8000:8000 \
+#     -e VMANAGE_USERNAME=admin \
+#     -e VMANAGE_PASSWORD=secret \
+#     -v $(pwd)/specs:/app/specs \
+#     catalyst-sdwan-super-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 # -----------------------------------------------------------------------
