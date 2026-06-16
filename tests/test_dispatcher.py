@@ -10,7 +10,7 @@ import respx
 
 from sdwan_mcp.auth import VManageAuth
 from sdwan_mcp.dispatcher import Dispatcher, _stats_db_hint
-from sdwan_mcp.loader import OperationSpec, SpecLoader
+from sdwan_mcp.loader import OperationSpec, SpecLoader, ToolGroup
 
 
 @pytest.fixture
@@ -206,6 +206,51 @@ async def test_dispatcher_annotates_stats_db_500(dispatcher: Dispatcher) -> None
     assert result["status_code"] == 500
     assert result["body"] == REST0001_BODY  # raw body preserved
     assert "hint" in result and "statistics" in result["hint"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Tool-scoped dispatch: a colliding action_name routes to the calling tool (#65)
+# ---------------------------------------------------------------------------
+
+
+def _colliding_dispatcher() -> Dispatcher:
+    """Two tools both expose action `get_bgp`, pointing at different paths."""
+    op_a = OperationSpec(
+        operation_id="a", action_name="get_bgp", summary="", method="get", path="/a/bgp", tag="t"
+    )
+    op_b = OperationSpec(
+        operation_id="b", action_name="get_bgp", summary="", method="get", path="/b/bgp", tag="t"
+    )
+    index = SpecLoader._build_index(
+        [
+            ToolGroup(name="tool_a", display_tag="A", operations=[op_a]),
+            ToolGroup(name="tool_b", display_tag="B", operations=[op_b]),
+        ]
+    )
+    auth = VManageAuth(
+        host="vm.test", port=8443, username="admin", password="pwd", verify_ssl=False, use_jwt=True
+    )
+    auth._jwt_token = "fake-jwt"
+    auth._xsrf_token = "fake-xsrf"
+    auth._token_expires_at = 1e18
+    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d.set_index(index)
+    return d
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_routes_colliding_action_to_calling_tool() -> None:
+    """`get_bgp` on tool_b must hit /b/bgp, not tool_a's /a/bgp. Regression for
+    the #65 misroute where the global index kept only the first occurrence."""
+    d = _colliding_dispatcher()
+    with respx.mock(assert_all_called=True) as router:
+        route_b = router.get("https://vm.test:8443/dataservice/b/bgp").mock(
+            return_value=httpx.Response(200, json={"tool": "b"})
+        )
+        result = await d.call("get_bgp", {}, tool_name="tool_b")
+
+    assert route_b.called
+    assert result == {"tool": "b"}
 
 
 @pytest.mark.asyncio

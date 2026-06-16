@@ -148,11 +148,33 @@ class ToolGroup:
 
 @dataclass
 class SpecIndex:
-    """Flat lookup: action_name -> OperationSpec, built for O(1) dispatch."""
+    """Lookups built for O(1) dispatch.
+
+    Action names are unique only *within a tool* (the splitter can produce two
+    sibling tools that derive the same name from different URL paths). So the
+    authoritative dispatch index is ``by_tool`` — tool_name -> {action_name ->
+    op}. ``by_action_name`` is a best-effort flat view kept for back-compat and
+    convenience lookups; on a cross-tool collision it keeps the first occurrence
+    and is therefore lossy. Never route a real tool call through it (#65).
+    """
 
     by_action_name: dict[str, OperationSpec] = field(default_factory=dict)
     by_operation_id: dict[str, OperationSpec] = field(default_factory=dict)
+    by_tool: dict[str, dict[str, OperationSpec]] = field(default_factory=dict)
     groups: list[ToolGroup] = field(default_factory=list)
+
+    def resolve(self, action_name: str, tool_name: str | None = None) -> OperationSpec | None:
+        """Resolve an action to its operation, tool-scoped when possible.
+
+        With ``tool_name`` (the production path), look the action up inside that
+        tool's namespace so a name shared by another tool can never misroute.
+        Without it (direct/legacy callers, tests), fall back to the flat view.
+        """
+        if tool_name is not None:
+            scoped = self.by_tool.get(tool_name)
+            if scoped is not None:
+                return scoped.get(action_name)
+        return self.by_action_name.get(action_name)
 
 
 # ---------------------------------------------------------------------------
@@ -720,21 +742,28 @@ class SpecLoader:
     @staticmethod
     def _build_index(groups: list[ToolGroup]) -> SpecIndex:
         index = SpecIndex(groups=groups)
+        total_ops = 0
+        collisions = 0
         for group in groups:
+            scoped = index.by_tool.setdefault(group.name, {})
             for op in group.operations:
+                total_ops += 1
+                # Authoritative, lossless: action names are unique within a tool.
+                scoped[op.action_name] = op
+                # Flat back-compat view: first occurrence wins. A cross-tool name
+                # clash is expected (sibling tools deriving the same name) and is
+                # handled by tool-scoped dispatch — not an error (#65).
                 if op.action_name in index.by_action_name:
-                    print(
-                        f"[loader] WARNING: duplicate action_name '{op.action_name}' "
-                        f"after dedup — keeping first occurrence"
-                    )
+                    collisions += 1
                 else:
                     index.by_action_name[op.action_name] = op
                 # operation_id duplicates can happen across tools — keep the first.
                 index.by_operation_id.setdefault(op.operation_id, op)
 
-        print(
-            f"[loader] Index built: {len(index.by_action_name)} actions across {len(groups)} tools"
-        )
+        msg = f"[loader] Index built: {total_ops} actions across {len(groups)} tools"
+        if collisions:
+            msg += f" ({collisions} cross-tool name(s) resolved by tool scoping)"
+        print(msg)
         return index
 
 

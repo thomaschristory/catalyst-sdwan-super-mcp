@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Operations sharing a derived action name across tools are no longer dropped
+  or misrouted (#65).** Action names are unique only *within* a tool, but the
+  dispatch index was a single flat `action_name -> op` dict. When the splitter
+  produced sibling tools that derived the same name from different URL paths
+  (e.g. `get_feature_profile_sd_routing_bgp`), the flat index kept the first
+  occurrence and silently dropped the rest — on 20.15 read-write that was 292 of
+  3815 operations. Worse, calling the dropped action on its own tool resolved to
+  the *other* tool's endpoint (a misroute). Dispatch is now **tool-scoped**: the
+  loader builds a `by_tool` index and the dispatcher resolves an action within
+  the calling tool's namespace. All operations are reachable and route correctly.
+  The flood of `duplicate action_name … keeping first occurrence` WARNINGs at
+  startup is replaced by a single summary line.
+
 ## [0.4.1] - 2026-06-12
 
 Closes the [v0.4.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/7) (#62).
