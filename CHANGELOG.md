@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-16
+
+Closes the [v0.4.2 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/8) (#65, #64).
+
 ### Fixed
 - **Operations sharing a derived action name across tools are no longer dropped
   or misrouted (#65).** Action names are unique only *within* a tool, but the
@@ -20,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the calling tool's namespace. All operations are reachable and route correctly.
   The flood of `duplicate action_name … keeping first occurrence` WARNINGs at
   startup is replaced by a single summary line.
+
+### Documentation
+- Added a `streamable-http` Docker run example to the `Dockerfile` usage block
+  and the Docker guide, alongside the existing stdio and SSE examples (#64).
 
 ## [0.4.1] - 2026-06-12
 
