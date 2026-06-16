@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-16
+
+Closes the [v0.5.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/10) (#72).
+
 ### Added
 - **Debug mode for capturing the upstream vManage request/response (#72).** A new
   off-by-default toggle (`debug.enabled` / `SDWAN_MCP_DEBUG=1` / `--debug`) makes
