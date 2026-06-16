@@ -166,14 +166,14 @@ class SpecIndex:
     def resolve(self, action_name: str, tool_name: str | None = None) -> OperationSpec | None:
         """Resolve an action to its operation, tool-scoped when possible.
 
-        With ``tool_name`` (the production path), look the action up inside that
-        tool's namespace so a name shared by another tool can never misroute.
-        Without it (direct/legacy callers, tests), fall back to the flat view.
+        With ``tool_name`` (the production path), the lookup is scoped strictly to
+        that tool's namespace so a name shared by another tool can never misroute;
+        an unknown tool or a missing action returns ``None`` (fail-safe) rather
+        than degrading to the lossy flat view. Without ``tool_name`` (direct/legacy
+        callers, tests), resolve against the flat view.
         """
         if tool_name is not None:
-            scoped = self.by_tool.get(tool_name)
-            if scoped is not None:
-                return scoped.get(action_name)
+            return self.by_tool.get(tool_name, {}).get(action_name)
         return self.by_action_name.get(action_name)
 
 

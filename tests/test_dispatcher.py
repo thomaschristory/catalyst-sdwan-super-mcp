@@ -244,13 +244,30 @@ async def test_dispatcher_routes_colliding_action_to_calling_tool() -> None:
     the #65 misroute where the global index kept only the first occurrence."""
     d = _colliding_dispatcher()
     with respx.mock(assert_all_called=True) as router:
+        route_a = router.get("https://vm.test:8443/dataservice/a/bgp").mock(
+            return_value=httpx.Response(200, json={"tool": "a"})
+        )
         route_b = router.get("https://vm.test:8443/dataservice/b/bgp").mock(
             return_value=httpx.Response(200, json={"tool": "b"})
         )
-        result = await d.call("get_bgp", {}, tool_name="tool_b")
+        # Both directions: each tool resolves its OWN op, neither clobbers the other.
+        result_b = await d.call("get_bgp", {}, tool_name="tool_b")
+        result_a = await d.call("get_bgp", {}, tool_name="tool_a")
 
-    assert route_b.called
-    assert result == {"tool": "b"}
+    assert route_a.called and route_b.called
+    assert result_a == {"tool": "a"}
+    assert result_b == {"tool": "b"}
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_unknown_tool_name_fails_safe() -> None:
+    """A provided-but-unknown tool_name returns the not-found error rather than
+    silently degrading to the lossy flat index (#65 review hardening)."""
+    d = _colliding_dispatcher()
+    result = await d.call("get_bgp", {}, tool_name="no_such_tool")
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+    assert "Unknown action" in result["message"]
 
 
 @pytest.mark.asyncio

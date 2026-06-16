@@ -12,8 +12,10 @@ from sdwan_mcp.tools import _build_description, register_tools
 class _StubDispatcher:
     """Stand-in for Dispatcher; registration never invokes it."""
 
-    async def call(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
-        return {"action": action, "params": params}
+    async def call(
+        self, action: str, params: dict[str, Any], tool_name: str | None = None
+    ) -> dict[str, Any]:
+        return {"action": action, "params": params, "tool_name": tool_name}
 
 
 @pytest.fixture
