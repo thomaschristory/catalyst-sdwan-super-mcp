@@ -70,7 +70,9 @@ def stitch(
     """
     Concatenate the list-typed top-level field across pages and wrap with
     a pagination block. Other top-level fields from the first page are
-    preserved at the root, except `pageInfo` (it is folded into `pagination`).
+    preserved at the root, except the stitched list field itself, `pageInfo`
+    (folded into `pagination`), and any pre-existing `data` key (the stitched
+    list is always re-exposed under `data`).
     """
     if not pages:
         return {

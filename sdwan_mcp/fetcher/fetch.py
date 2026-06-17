@@ -138,7 +138,7 @@ async def _request_with_retry(
 
 
 def _parse_retry_after(raw: str | None) -> float | None:
-    """Parse the ``Retry-After`` header; only integer-seconds form is honoured."""
+    """Parse the ``Retry-After`` header; only the numeric delay-seconds form is honoured (HTTP-date form is ignored)."""
     if raw is None:
         return None
     try:

@@ -50,6 +50,10 @@ def diff_versions(
     new_version: str,
     read_write: bool = True,  # diff in RW mode to catch all operations
 ) -> VersionDiff:
+    """Load both spec versions and return a VersionDiff of removed, added, and
+    changed operations, keyed by Cisco's operationId (via the loader's
+    by_operation_id index). Defaults to RW mode so GET and mutating operations
+    are both compared."""
     old_index = SpecLoader(specs_dir, old_version, read_write=read_write).load()
     new_index = SpecLoader(specs_dir, new_version, read_write=read_write).load()
 
@@ -171,6 +175,9 @@ def _diff_params(old: OperationSpec, new: OperationSpec) -> list[ParamDiff]:
 
 
 def print_diff(diff: VersionDiff) -> None:
+    """Print a human-readable summary of a VersionDiff to stdout: REMOVED,
+    ADDED, and CHANGED (parameter/method/path drift) sections, followed by a
+    one-line count summary."""
     print(f"\n=== SD-WAN API Diff: {diff.old_version} → {diff.new_version} ===\n")
 
     if diff.removed:

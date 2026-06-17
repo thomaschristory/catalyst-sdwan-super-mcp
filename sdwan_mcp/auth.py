@@ -11,8 +11,10 @@ Supports two modes:
   Session-based (legacy fallback for older vManage)
     POST /j_security_check → JSESSIONID cookie
     GET  /dataservice/client/token → xsrf token
-    All requests: Cookie: JSESSIONID=...
-                  X-XSRF-TOKEN: {xsrfToken}
+    All requests: X-XSRF-TOKEN: {xsrfToken}
+                  (the JSESSIONID cookie is attached automatically by httpx's
+                   cookie jar — we do NOT set a Cookie header ourselves; see
+                   headers())
 
 Set use_jwt: false in sdwan-mcp.yaml to force session mode.
 """
@@ -122,7 +124,8 @@ class VManageAuth:
     def is_session_expired(self, response: httpx.Response) -> bool:
         """
         Detect session expiry — vManage returns a 302 redirect to welcome.html
-        when the session is invalidated, or 401 for JWT expiry.
+        when the session is invalidated. A 401 (e.g. JWT expiry) is also treated
+        as expired regardless of auth mode.
         """
         if response.status_code == 302:
             location = response.headers.get("location", "")

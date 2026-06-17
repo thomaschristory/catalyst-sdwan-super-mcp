@@ -3,7 +3,9 @@ config.py — application configuration.
 
 Sources, highest priority first:
 
-    1. constructor kwargs (programmatic / CLI overrides applied in server.py)
+    1. constructor kwargs (init_settings — the highest-priority source, but
+       unused today: AppConfig() is always built with no kwargs. CLI flags are
+       applied post-load in server.py as ``args.X or config.X``, not here.)
     2. environment variables (VMANAGE_HOST, VMANAGE_PORT, VMANAGE_USERNAME,
        VMANAGE_PASSWORD, VMANAGE_VERIFY_SSL, VMANAGE_USE_JWT, VMANAGE_TIMEOUT)
     3. the YAML config file (optional), with legacy ``${ENV}`` interpolation
@@ -120,8 +122,10 @@ class DebugConfig(_Base):
 
     # Master switch. Env: SDWAN_MCP_DEBUG, CLI: --debug.
     enabled: bool = False
-    # Strip auth headers (Authorization / X-XSRF-TOKEN / Cookie / Set-Cookie)
-    # from captured output so logs are safe to paste into an issue. Env:
+    # Mask credentials in captured output so logs are safe to paste into an
+    # issue: auth headers (Authorization / X-XSRF-TOKEN / Cookie / Set-Cookie)
+    # AND credential-shaped body/query values (keys matching _SENSITIVE_KEY_RE,
+    # e.g. tokens vManage returns in a response body). Env:
     # SDWAN_MCP_DEBUG_REDACT=0, CLI: --debug-no-redact.
     redact: bool = True
     # Which calls to capture: "errors" (default — only failed upstream calls,

@@ -148,8 +148,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         default=None,
         help=(
-            "With --debug: do NOT strip auth headers from captured output. "
-            "Only use on a trusted local terminal — output may contain tokens."
+            "With --debug: do NOT redact captured output. Disables masking of "
+            "auth headers AND credential-shaped body/query values (e.g. tokens "
+            "returned in a response body). Only use on a trusted local terminal."
         ),
     )
     return parser.parse_args(argv)

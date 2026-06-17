@@ -15,13 +15,13 @@ You should see something like:
 [server] Spec version : 20.18
 [server] Mode         : READ-ONLY
 [server] Transport    : stdio
-[server] Auth         : JWT
+[server] vManage Auth : JWT
 [loader] Loading vmanageapi_2018.yaml
 [loader] Loaded 1 spec file(s), 2802 total paths
-[loader] Mode=RO, max_actions_per_tool=150 -> 229 tool(s), 2227 operations
-[loader] Index built: 2116 actions across 229 tools
+[loader] Mode=RO, max_actions_per_tool=150 -> 230 tool(s), 2251 operations
+[loader] Index built: 2251 actions across 230 tools
 [auth] JWT login successful
-[server] 229 tools registered — starting stdio transport
+[server] 230 tools registered — starting stdio transport
 ```
 
 ## Run as SSE (network-accessible)

@@ -87,8 +87,8 @@ Loader output on the bundled specs with default settings (`max_actions_per_tool:
 | Version | RO tools | RO max tool | RW tools | RW max tool | Over cap |
 |---|---:|---:|---:|---:|---:|
 | 20.15 | 206 | 131 | 292 | 136 | 0 |
-| 20.16 | 213 | 108 | 330 | 123 | 0 |
-| 20.18 | 229 | 111 | 360 | 111 | 0 |
+| 20.16 | 214 | 108 | 330 | 123 | 0 |
+| 20.18 | 230 | 111 | 360 | 111 | 0 |
 
 Reproduce locally:
 
