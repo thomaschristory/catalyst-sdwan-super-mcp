@@ -118,6 +118,22 @@ class ParameterSpec:
 
 
 @dataclass
+class BodyFieldSpec:
+    """A single top-level field of a JSON request body.
+
+    Surfaced from the OpenAPI ``requestBody`` schema (resolving one ``$ref``
+    level) so the tool description can name the real body fields a caller passes
+    at the top level of ``params`` — rather than the opaque ``body: object``
+    wrapper that mislead callers into nesting under a literal ``body`` key (#78).
+    """
+
+    name: str
+    type: str = "string"
+    required: bool = False
+    description: str = ""
+
+
+@dataclass
 class OperationSpec:
     operation_id: str  # Cisco's operationId — kept as a back-reference for --diff
     action_name: str  # stable, derived name used by the dispatcher and MCP tools
@@ -128,6 +144,7 @@ class OperationSpec:
     parameters: list[ParameterSpec] = field(default_factory=list)
     has_body: bool = False
     body_description: str = ""
+    body_fields: list[BodyFieldSpec] = field(default_factory=list)
     pagination: Literal["scroll", "offset"] | None = None
 
 
@@ -265,6 +282,20 @@ def _is_readsafe_stats_query(op: OperationSpec) -> bool:
     return bool(segs) and segs[-1] in _STATS_QUERY_LEAVES
 
 
+def is_stats_query_body(op: OperationSpec) -> bool:
+    """True for a POST whose JSON body is a statistics-DB query DSL payload.
+
+    The accepted top-level fields of that DSL (``size, aggregation, plot_data,
+    fields, category, query, sort``) are fixed and knowable, but Cisco's spec
+    declares these bodies as a bare ``{"type": "object"}`` — so ``body_fields``
+    comes back empty and the description has nothing to show. This predicate lets
+    the description layer bake in the known field list for exactly this family
+    (#78, item 2). Same fail-safe footing as the #62 RO-mode stats heuristic: any
+    POST under a ``statistics`` path segment carrying a body qualifies.
+    """
+    return op.method == "post" and op.has_body and "statistics" in _path_segments(op.path)
+
+
 def _is_broken_stats_query_get(op: OperationSpec) -> bool:
     """
     True for the GET raw-query form of a statistics endpoint — the one that
@@ -361,16 +392,116 @@ def _detect_pagination_style(parameters: list[ParameterSpec]) -> Literal["scroll
     return None
 
 
+def _resolve_ref(ref: str, schemas: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a local ``#/components/schemas/Name`` ref one level.
+
+    Only local component refs are followed; anything else, a missing target, or a
+    malformed (non-dict) target yields an empty dict, so callers degrade to "no
+    known fields" rather than raising on an unfamiliar spec shape.
+    """
+    prefix = "#/components/schemas/"
+    if not ref.startswith(prefix):
+        return {}
+    target = schemas.get(ref[len(prefix) :])
+    return target if isinstance(target, dict) else {}
+
+
+def _collect_body_fields(
+    schema: Any,
+    schemas: dict[str, Any],
+    properties: dict[str, Any],
+    required: set[str],
+    seen_refs: set[str],
+) -> None:
+    """Walk a JSON-body schema collecting top-level ``properties`` and ``required``.
+
+    Follows ``$ref`` (one component at a time, cycle-guarded by ``seen_refs``) and
+    merges across ``allOf`` members — a vManage feature-profile body is typically
+    ``allOf: [ {$ref: BaseParcel}, {properties: {...the real fields...}} ]``, so the
+    fields only surface if we descend both. ``oneOf``/``anyOf`` are deliberately
+    NOT merged: they are unions, so flattening them would assert fields that don't
+    co-occur. Every step is isinstance-guarded so a malformed spec degrades to
+    "no known fields" instead of crashing the whole loader.
+    """
+    if not isinstance(schema, dict):
+        return
+    ref = schema.get("$ref")
+    if isinstance(ref, str):
+        if ref in seen_refs:
+            return
+        seen_refs.add(ref)
+        _collect_body_fields(_resolve_ref(ref, schemas), schemas, properties, required, seen_refs)
+        return
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        for name, prop in props.items():
+            properties.setdefault(name, prop)
+    req = schema.get("required")
+    if isinstance(req, list):
+        required.update(r for r in req if isinstance(r, str))
+    for member in schema.get("allOf") or []:
+        _collect_body_fields(member, schemas, properties, required, seen_refs)
+
+
+def _parse_request_body(
+    operation: dict[str, Any], schemas: dict[str, Any]
+) -> tuple[bool, str, list[BodyFieldSpec]]:
+    """Extract (has_body, description, top-level fields) from a requestBody.
+
+    The fields list is best-effort: it is populated only when the JSON body
+    schema (after resolving ``$ref``/``allOf``) declares ``properties``. Many
+    vManage bodies — notably the entire statistics-query family — are bare
+    ``{"type": "object"}`` with no properties in the spec, so the list is left
+    empty and the description falls back to a top-level-convention note (#78). We
+    never invent fields the spec doesn't describe; the only baked-in field list
+    is the stats-DB query DSL, and that lives in the description layer (tools.py),
+    not here.
+    """
+    if "requestBody" not in operation:
+        return False, "", []
+
+    request_body = operation["requestBody"]
+    if not isinstance(request_body, dict):
+        return True, "", []
+
+    description = request_body.get("description", "Request body (JSON)")
+
+    content = request_body.get("content")
+    content = content if isinstance(content, dict) else {}
+    media = (
+        content.get("application/json")
+        or content.get("application/json;charset=utf-8")
+        or content.get("*/*")
+        or {}
+    )
+    media = media if isinstance(media, dict) else {}
+    schema = media.get("schema")
+    schema = schema if isinstance(schema, dict) else {}
+
+    properties: dict[str, Any] = {}
+    required: set[str] = set()
+    _collect_body_fields(schema, schemas, properties, required, set())
+
+    fields = [
+        BodyFieldSpec(
+            name=name,
+            type=_extract_type(prop if isinstance(prop, dict) else {}),
+            required=name in required,
+            description=(prop.get("description", "") if isinstance(prop, dict) else ""),
+        )
+        for name, prop in properties.items()
+    ]
+    return True, description, fields
+
+
 def _parse_operation(
     path: str,
     method: str,
     operation: dict[str, Any],
     tag: str,
+    schemas: dict[str, Any] | None = None,
 ) -> OperationSpec:
-    has_body = "requestBody" in operation
-    body_desc = ""
-    if has_body:
-        body_desc = operation["requestBody"].get("description", "Request body (JSON)")
+    has_body, body_desc, body_fields = _parse_request_body(operation, schemas or {})
 
     op_id = operation.get("operationId", f"{method}_{path}")
     parameters = _parse_parameters(operation.get("parameters", []))
@@ -384,6 +515,7 @@ def _parse_operation(
         parameters=parameters,
         has_body=has_body,
         body_description=body_desc,
+        body_fields=body_fields,
         pagination=_detect_pagination_style(parameters),
     )
 
@@ -702,6 +834,7 @@ class SpecLoader:
 
     @staticmethod
     def _extract_operations(spec: dict[str, Any]) -> list[OperationSpec]:
+        schemas = spec.get("components", {}).get("schemas", {}) or {}
         ops: list[OperationSpec] = []
         for path, path_item in spec.get("paths", {}).items():
             for method, operation in path_item.items():
@@ -710,7 +843,7 @@ class SpecLoader:
                 if not isinstance(operation, dict):
                     continue
                 tags = operation.get("tags") or ["Untagged"]
-                ops.append(_parse_operation(path, method.lower(), operation, tags[0]))
+                ops.append(_parse_operation(path, method.lower(), operation, tags[0], schemas))
         return ops
 
     # ------------------------------------------------------------------

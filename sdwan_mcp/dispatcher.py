@@ -266,6 +266,17 @@ class Dispatcher:
         }
 
         sent_body = body_params if body_params else None
+        # Defensive unwrap (#78): the body fields belong at the top level of
+        # params, but a caller that followed the old `body: object` schema may
+        # nest the whole payload under a lone `body` key. Forwarding that
+        # verbatim double-wraps the request (vManage rejects it as an
+        # "Unrecognized field 'body'"). When `body` is the *sole* body key,
+        # unwrap it — whatever its value (object, array, or scalar) — so every
+        # nested-style call works; a real field literally named `body` alongside
+        # other fields is left untouched. (A None value can't occur here: None
+        # params are dropped during the path/query/body split above.)
+        if isinstance(sent_body, dict) and set(sent_body) == {"body"}:
+            sent_body = sent_body["body"]
         debug_on = self._debug_cfg.enabled
         started = time.monotonic()
 
@@ -565,7 +576,23 @@ def _stats_db_hint(op: OperationSpec, status_code: int, body: Any) -> str | None
     The wording is deliberately tiered to avoid over-claiming: a ``REST0001``
     body is the strong stats-DB signal and gets a confident lead-in, whereas a
     plain 500 on a ``/statistics`` path could equally be a validation or
-    permission error, so that lead-in is hedged."""
+    permission error, so that lead-in is hedged.
+
+    A 400 ``STATS_VALIDATION0001`` is the complementary, post-auth signal: the
+    request cleared RBAC and the *stats engine* rejected the query shape. The
+    canonical cause is the ``body``-wrapper mistake (#78), so the hint names the
+    top-level convention and the accepted fields. The 500-vs-400 distinction is
+    itself diagnostic: 500 ``REST0001`` is pre-query (auth/RBAC), 400
+    ``STATS_VALIDATION0001`` is post-auth (query validation)."""
+    if status_code == 400 and _error_code(body) == "STATS_VALIDATION0001":
+        return (
+            "vManage's statistics engine rejected this query's shape "
+            "(STATS_VALIDATION0001). Auth/RBAC passed — this is a query-validation "
+            "error, not a permission error. Pass the request-body fields at the TOP "
+            "LEVEL of params (do NOT nest them under a 'body' key). Accepted "
+            "top-level fields: size, aggregation, plot_data, fields, category, "
+            "query, sort."
+        )
     if status_code != 500:
         return None
     is_rest0001 = _error_code(body) == "REST0001"
