@@ -62,7 +62,7 @@ How you set the header depends on the client:
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-The loader rejects tokens shorter than 8 characters outright and warns on
+The server rejects tokens shorter than 8 characters outright and warns on
 anything under 16. Aim for ≥32 characters of URL-safe base64.
 
 ### Rate-limiting and brute force

@@ -22,4 +22,4 @@
 
 7. A companion workflow (`milestone-rollover.yml`) fires on the same tag push and performs the **milestone auto-rollover** step: it closes the milestone whose title matches the released tag and opens the next patch milestone (e.g. close `v0.2.1` → open `v0.2.2`). Re-target any leftover open issues at the new milestone.
 
-The `docs` workflow deploys mkdocs-material to GitHub Pages on every push to `main` (and via `workflow_dispatch`).
+The `docs` workflow deploys mkdocs-material to GitHub Pages on pushes to `main` that touch `docs/**`, `mkdocs.yml`, or the workflow itself (and via `workflow_dispatch`).

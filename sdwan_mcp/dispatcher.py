@@ -113,7 +113,7 @@ class Dispatcher:
     # ------------------------------------------------------------------
 
     def set_index(self, index: SpecIndex) -> None:
-        """Attach the spec index so the dispatcher can resolve operationIds."""
+        """Attach the spec index so the dispatcher can resolve derived action names."""
         self._index = index
 
     async def call(

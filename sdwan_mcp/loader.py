@@ -15,7 +15,12 @@ Splitting algorithm (see issue #13):
            - else recurse by URL path segments, starting at depth 3
              (after stripping /dataservice), deepening one segment at a
              time until every bucket <= N OR depth 5 is reached. Emit one
-             tool per leaf bucket, named <section>_<subtag>_<last-segment>.
+             tool per leaf bucket, named <section>_<subtag>_<discriminator>,
+             where <discriminator> is the path segment(s) left after the
+             buckets' common prefix is stripped (may span several segments).
+             If every op shares one structural path through depth 5 there is
+             nothing to discriminate on, so a single tool named
+             <section>_<subtag> is emitted with no trailing segment.
        - sibling buckets with <4 ops collapse into <parent>_misc.
        - any tool still over N at max depth logs a WARNING; oversized
          tool is emitted anyway.
@@ -613,6 +618,13 @@ class SpecLoader:
     # ------------------------------------------------------------------
 
     def load(self) -> SpecIndex:
+        """Load and merge the version's spec files, filter operations by RO/RW
+        mode, adaptively split them into ToolGroups, and return a SpecIndex.
+
+        This is the loader's main public entry point. Runs, in order:
+        _load_and_merge -> _extract_operations -> _filter_methods ->
+        _split_into_groups -> _build_index.
+        """
         merged = self._load_and_merge()
         ops = self._extract_operations(merged)
         ops = self._filter_methods(ops)

@@ -22,7 +22,7 @@ This is what makes the server work when installed via `uv tool install` and laun
 ```yaml
 vmanage:
   host: sandbox-sdwan-2.cisco.com   # required
-  port: 443                         # default: 8443
+  port: 443                         # default: 443
   verify_ssl: false                 # default: true — keep true in production; the self-signed sandbox opts out with false
   username: "${VMANAGE_USERNAME}"   # required (use env var)
   password: "${VMANAGE_PASSWORD}"   # required (use env var)
