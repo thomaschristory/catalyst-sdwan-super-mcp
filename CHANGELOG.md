@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-17
+
+Closes the [v0.5.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/11) (#75).
+
+### Documentation
+- **Full review of all documentation and inline docstrings (#75).** Audited every
+  prose doc and every module/function docstring against the actual code as of
+  v0.5.0, adversarially re-verifying each claim against the source before editing
+  and landing only high-confidence corrections. Prose fixes: `vmanage.port`
+  default is `443` (was documented as `8443`); the RO tool counts in the
+  tool-splitting table are `214` (20.16) and `230` (20.18); the `first-run`
+  startup sample now matches current output; the docs deploy is path-filtered
+  rather than running on every push to `main`; token-length validation is
+  performed by the server, not the loader. Docstring fixes: `auth.py` (session
+  mode sets only `X-XSRF-TOKEN`; `401` treated as expired in both modes),
+  `config.py` (`init_settings` unused; `redact` masks body/query credentials too),
+  `server.py` (`--debug-no-redact` scope), `dispatcher.py` (resolves derived
+  action names, not operationIds), `loader.py` (leaf-tool naming;
+  `SpecLoader.load()` docstring), `pagination.py` (`stitch` exclusions),
+  `diff.py` (added docstrings), and `fetcher/fetch.py` (`Retry-After` parsing).
+  No code behaviour changes.
+
 ## [0.5.0] - 2026-06-16
 
 Closes the [v0.5.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/10) (#72).
