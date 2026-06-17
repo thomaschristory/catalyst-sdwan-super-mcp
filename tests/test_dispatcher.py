@@ -282,3 +282,97 @@ async def test_dispatcher_no_hint_on_ordinary_500(dispatcher: Dispatcher) -> Non
     assert isinstance(result, dict)
     assert result["error"] is True
     assert "hint" not in result
+
+
+# ---------------------------------------------------------------------------
+# POST body: top-level convention + defensive `body`-wrapper unwrap (#78)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_unwraps_lone_body_wrapper(dispatcher: Dispatcher) -> None:
+    """A caller that nested the whole payload under a lone `body` key (the shape
+    the old `body: object` schema implied) must not double-wrap: the dispatcher
+    unwraps it so vManage sees the fields at the top level (#78)."""
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
+            return_value=httpx.Response(200, json={"ok": True})
+        )
+        await dispatcher.call(
+            "post_device_actions_config",
+            {"deviceId": "abc", "body": {"name": "edge-1"}},
+        )
+
+    body = route.calls.last.request.content.decode()
+    assert '"name"' in body and "edge-1" in body
+    # The literal `body` wrapper must NOT reach vManage.
+    assert '"body"' not in body
+    assert '"deviceId"' not in body  # still consumed as a path param
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_keeps_body_field_alongside_others(dispatcher: Dispatcher) -> None:
+    """Only a *lone* `body` key is unwrapped. A genuine field named `body` next to
+    other fields is forwarded verbatim — we don't guess it's a wrapper."""
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
+            return_value=httpx.Response(200, json={"ok": True})
+        )
+        await dispatcher.call(
+            "post_device_actions_config",
+            {"deviceId": "abc", "body": "literal", "name": "edge-1"},
+        )
+
+    body = route.calls.last.request.content.decode()
+    assert '"body"' in body and "literal" in body
+    assert "edge-1" in body
+
+
+def test_stats_hint_fires_on_400_stats_validation() -> None:
+    """A 400 STATS_VALIDATION0001 is the post-auth query-shape signal: name the
+    top-level convention and the accepted fields (#78)."""
+    body = {"error": {"message": "Invalid query.", "code": "STATS_VALIDATION0001"}}
+    hint = _stats_db_hint(_op("/statistics/interface/aggregation", "post"), 400, body)
+    assert hint is not None
+    assert "STATS_VALIDATION0001" in hint
+    assert "top level" in hint.lower()
+    assert "body" in hint.lower()
+
+
+def test_stats_hint_silent_on_other_400() -> None:
+    """An unrelated 400 (different error code) gets no stats hint."""
+    assert _stats_db_hint(_op("/devices"), 400, {"error": {"code": "OTHER"}}) is None
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_unwraps_lone_body_wrapper_non_dict(dispatcher: Dispatcher) -> None:
+    """The lone-`body` unwrap covers non-dict payloads too (e.g. an array body
+    nested under `body`) — otherwise the double-wrap persists (#78 review)."""
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
+            return_value=httpx.Response(200, json={"ok": True})
+        )
+        await dispatcher.call(
+            "post_device_actions_config",
+            {"deviceId": "abc", "body": [{"x": 1}, {"x": 2}]},
+        )
+
+    import json as _json
+
+    sent = _json.loads(route.calls.last.request.content.decode())
+    assert sent == [{"x": 1}, {"x": 2}]  # array forwarded, not {"body": [...]}
+
+
+def test_stats_hint_400_rest0001_gets_no_stats_db_hint() -> None:
+    """A 400 carrying REST0001 (not STATS_VALIDATION0001) must NOT get the
+    stats-DB-disabled hint — that hint is for 500s. No false signal (#78 review)."""
+    assert _stats_db_hint(_op("/statistics/x", "post"), 400, REST0001_BODY) is None
+
+
+def test_stats_hint_500_stats_validation_falls_through_to_500_path() -> None:
+    """A 500 carrying STATS_VALIDATION0001 is not the 400 query-shape case; it
+    falls through to the 500 handling, not the new 400 hint (#78 review)."""
+    body = {"error": {"code": "STATS_VALIDATION0001"}}
+    hint = _stats_db_hint(_op("/statistics/x", "post"), 500, body)
+    # Not the 400 query-shape hint.
+    assert hint is None or "STATS_VALIDATION0001" not in hint

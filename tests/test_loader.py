@@ -13,6 +13,8 @@ from sdwan_mcp.loader import (
     SpecLoader,
     ToolGroup,
     _derive_action_name,
+    _parse_request_body,
+    is_stats_query_body,
 )
 
 # ---------------------------------------------------------------------------
@@ -645,3 +647,187 @@ def test_loader_no_pagination_for_plain_op(tmp_path):
     idx = SpecLoader(str(_make_spec(tmp_path, "20.99", ops)), "20.99", read_write=False).load()
     op = next(iter(idx.by_action_name.values()))
     assert op.pagination is None
+
+
+# ---------------------------------------------------------------------------
+# Request-body field extraction (#78)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_request_body_resolves_ref_to_top_level_fields() -> None:
+    """A $ref'd body schema is resolved one level so its top-level fields and
+    required flags surface for the tool description."""
+    schemas = {
+        "StatsQuery": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "object", "description": "Query filter"},
+                "size": {"type": "integer"},
+                "aggregation": {"type": "object"},
+            },
+        }
+    }
+    operation = {
+        "requestBody": {
+            "description": "Query filter",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/StatsQuery"}}
+            },
+        }
+    }
+    has_body, desc, fields = _parse_request_body(operation, schemas)
+    assert has_body is True
+    assert desc == "Query filter"
+    by_name = {f.name: f for f in fields}
+    assert set(by_name) == {"query", "size", "aggregation"}
+    assert by_name["query"].required is True
+    assert by_name["size"].required is False
+    assert by_name["size"].type == "integer"
+    assert by_name["query"].description == "Query filter"
+
+
+def test_parse_request_body_bare_object_yields_no_fields() -> None:
+    """vManage's stats bodies are bare {"type": "object"} in the spec — we must
+    not invent fields, so the list stays empty but has_body is still True."""
+    operation = {"requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}}}
+    has_body, _desc, fields = _parse_request_body(operation, {})
+    assert has_body is True
+    assert fields == []
+
+
+def test_parse_request_body_absent() -> None:
+    has_body, desc, fields = _parse_request_body({}, {})
+    assert has_body is False
+    assert desc == ""
+    assert fields == []
+
+
+def test_parse_request_body_unresolvable_ref_degrades_to_empty() -> None:
+    """A $ref with no matching component yields no fields rather than raising."""
+    operation = {
+        "requestBody": {
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Missing"}}}
+        }
+    }
+    has_body, _desc, fields = _parse_request_body(operation, {})
+    assert has_body is True
+    assert fields == []
+
+
+# ---------------------------------------------------------------------------
+# Request-body robustness + composition (#78 review hardening)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_request_body_merges_allof_and_nested_ref() -> None:
+    """Feature-profile bodies are allOf:[{$ref Base}, {properties: real fields}].
+    Both the $ref'd base and the inline member must contribute fields."""
+    schemas = {
+        "Base": {"type": "object", "properties": {"id": {"type": "string"}}},
+        "Cellular": {
+            "allOf": [
+                {"$ref": "#/components/schemas/Base"},
+                {
+                    "type": "object",
+                    "required": ["simSlot0"],
+                    "properties": {
+                        "simSlot0": {"type": "object"},
+                        "primarySlot": {"type": "integer"},
+                    },
+                },
+            ]
+        },
+    }
+    operation = {
+        "requestBody": {
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Cellular"}}}
+        }
+    }
+    _has, _desc, fields = _parse_request_body(operation, schemas)
+    by_name = {f.name: f for f in fields}
+    assert set(by_name) == {"id", "simSlot0", "primarySlot"}
+    assert by_name["simSlot0"].required is True
+    assert by_name["id"].required is False
+
+
+def test_parse_request_body_falls_back_to_star_star_media() -> None:
+    """Some vManage bodies are declared only under */* — still extract fields."""
+    operation = {
+        "requestBody": {
+            "content": {
+                "*/*": {"schema": {"type": "object", "properties": {"x": {"type": "string"}}}}
+            }
+        }
+    }
+    _has, _desc, fields = _parse_request_body(operation, {})
+    assert [f.name for f in fields] == ["x"]
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        {"requestBody": None},
+        {"requestBody": "nonsense"},
+        {"requestBody": {"content": "nonsense"}},
+        {"requestBody": {"content": {"application/json": {"schema": "nonsense"}}}},
+        {
+            "requestBody": {
+                "content": {
+                    "application/json": {"schema": {"$ref": "#/components/schemas/Missing"}}
+                }
+            }
+        },
+    ],
+)
+def test_parse_request_body_degrades_on_malformed_spec(operation) -> None:
+    """A malformed requestBody must degrade to has_body=True, no fields — never
+    raise (which would abort the whole loader at startup) (#78 review)."""
+    has_body, _desc, fields = _parse_request_body(operation, {})
+    assert has_body is True
+    assert fields == []
+
+
+def test_resolve_ref_truthy_non_dict_target_degrades() -> None:
+    """A component stored as a truthy non-dict must not crash field extraction."""
+    operation = {
+        "requestBody": {
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/X"}}}
+        }
+    }
+    has_body, _desc, fields = _parse_request_body(operation, {"X": "notadict"})
+    assert has_body is True
+    assert fields == []
+
+
+def test_is_stats_query_body_detects_statistics_post() -> None:
+    stats = OperationSpec(
+        operation_id="x",
+        action_name="post_iface_aggregation",
+        summary="",
+        method="post",
+        path="/statistics/interface/aggregation",
+        tag="t",
+        has_body=True,
+    )
+    non_stats = OperationSpec(
+        operation_id="x",
+        action_name="post_thing",
+        summary="",
+        method="post",
+        path="/devices/config",
+        tag="t",
+        has_body=True,
+    )
+    get_stats = OperationSpec(
+        operation_id="x",
+        action_name="get_iface",
+        summary="",
+        method="get",
+        path="/statistics/interface",
+        tag="t",
+        has_body=False,
+    )
+    assert is_stats_query_body(stats) is True
+    assert is_stats_query_body(non_stats) is False
+    assert is_stats_query_body(get_stats) is False

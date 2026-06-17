@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-17
+
+Closes the [v0.6.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/12) (#78).
+
+### Changed (behavior)
+- **POST/PUT/PATCH tools no longer mislead callers into wrapping the body (#78).**
+  Every write action used to declare its request body as a single param literally
+  named `body: object`, while the dispatcher forwarded `params` verbatim as the
+  HTTP body — so the schema-faithful call `params={"body": {...}}` double-wrapped
+  and vManage rejected it (`400 STATS_VALIDATION0001`, "Unrecognized field
+  'body'"); only passing the fields at the top level of `params` worked. Schema
+  and behavior now agree:
+  - The tool description names the **real top-level body fields** (resolved from
+    the spec's `requestBody` schema, following `$ref` and merging `allOf`), e.g.
+    `body fields (top-level): query?: object, aggregation?: object, …`. ~37% of
+    POST bodies gain concrete field lists.
+  - For the **statistics-DB query family** — which Cisco's spec declares as a bare
+    `{"type": "object"}` with no fields — the known query-DSL fields (`size,
+    aggregation, plot_data, fields, category, query, sort`) are baked into the
+    description so the canonical case is one-shot correct.
+  - A single per-tool note states the convention once: request-body fields go at
+    the top level of `params`, never nested under a `body` key. The note is
+    omitted from tools with no body-bearing action (most tools in the default
+    read-only mode), so it costs nothing where it doesn't apply.
+  - The dispatcher **defensively unwraps** a lone `{"body": …}` wrapper (any value
+    type) so a caller that followed the old schema still succeeds.
+- **New error hint for `400 STATS_VALIDATION0001` (#78).** A statistics query that
+  clears auth/RBAC but is rejected by the stats engine now gets an actionable hint
+  naming the top-level convention and accepted fields, and distinguishing this
+  post-auth query-validation failure from the pre-query `500 REST0001` RBAC error.
+
+### Added
+- `OperationSpec.body_fields` and `loader._parse_request_body()` — best-effort
+  extraction of a request body's top-level fields (names, types, required flags)
+  from the OpenAPI spec, degrading to an empty list (never raising) on bare-object
+  or malformed body schemas.
+
 ## [0.5.1] - 2026-06-17
 
 Closes the [v0.5.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/11) (#75).
