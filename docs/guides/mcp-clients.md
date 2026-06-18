@@ -75,19 +75,61 @@ or lockout** on rejection rate itself — front the endpoint with a reverse
 proxy that does (nginx `limit_req`, Caddy `rate_limit`, or fail2ban) if
 the network surface is hostile.
 
-## Claude Desktop (stdio)
+## Recommended: launch via `uvx`
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the equivalent on Windows:
+The blocks below use [`uvx`](https://docs.astral.sh/uv/), which fetches and runs the
+published package on demand — no source checkout and no absolute paths to maintain.
+If you installed the package instead (`uv tool install` / `pipx`), replace
+`"command": "uvx", "args": ["catalyst-sdwan-super-mcp"]` with
+`"command": "sdwan-mcp", "args": []`. To enable mutations, append `"--read-write"`
+to `args`.
+
+## Claude Code
+
+One command:
+
+```bash
+claude mcp add sdwan \
+  -e VMANAGE_USERNAME=devnetuser \
+  -e VMANAGE_PASSWORD='RG!_Yw919_83' \
+  -e VMANAGE_VERIFY_SSL=false \
+  -- uvx catalyst-sdwan-super-mcp
+```
+
+(`VMANAGE_VERIFY_SSL=false` is only for the self-signed DevNet sandbox — omit it for a production vManage with a valid certificate.)
+
+…or commit a project-local `.mcp.json` (global config: `~/.claude/mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "sdwan": {
-      "command": "uv",
-      "args": ["--directory", "/absolute/path/to/catalyst-sdwan-super-mcp", "run", "sdwan-mcp"],
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
+      }
+    }
+  }
+}
+```
+
+## Claude Desktop (stdio)
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "sdwan": {
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
+      "env": {
+        "VMANAGE_USERNAME": "devnetuser",
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
@@ -96,20 +138,28 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 
 Restart Claude Desktop. You should see the `sdwan` server in the MCP indicator.
 
-## Claude Code
+## Cursor
 
-Use the project-local config (`.mcp.json`) or the global one (`~/.claude/mcp.json`):
+Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
 
 ```json
 {
   "mcpServers": {
     "sdwan": {
-      "command": "uv",
-      "args": ["--directory", ".", "run", "sdwan-mcp"]
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
+      "env": {
+        "VMANAGE_USERNAME": "devnetuser",
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
+      }
     }
   }
 }
 ```
+
+Other stdio clients (Cline, Continue, Windsurf, Zed, …) use the same shape: the
+`uvx catalyst-sdwan-super-mcp` command with `VMANAGE_*` in the environment.
 
 ## Docker (stdio)
 
@@ -135,7 +185,7 @@ Use the project-local config (`.mcp.json`) or the global one (`~/.claude/mcp.jso
 For clients that connect over the network rather than spawning a subprocess:
 
 ```bash
-uv run sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
+sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
 ```
 
 When exposing the server over the network, configure bearer token auth via

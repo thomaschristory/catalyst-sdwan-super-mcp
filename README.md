@@ -6,49 +6,126 @@
 [![PyPI](https://img.shields.io/pypi/v/catalyst-sdwan-super-mcp.svg)](https://pypi.org/project/catalyst-sdwan-super-mcp/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-A [FastMCP](https://gofastmcp.com) server that exposes the **Cisco Catalyst SD-WAN Manager (vManage)** REST API as MCP tools, so any MCP-compatible LLM client (Claude Desktop, Claude Code, Cursor, …) can query and manage your SD-WAN overlay.
+A [FastMCP](https://gofastmcp.com) server that exposes the **Cisco Catalyst SD-WAN Manager (vManage)** REST API as MCP tools, so any MCP-compatible LLM client (Claude Code, Claude Desktop, Cursor, …) can query and manage your SD-WAN overlay in natural language.
 
-Tools are **generated dynamically from the official OpenAPI specs** — drop in a new spec, the tools rebuild themselves. No per-version Python.
+Tools are **generated dynamically from the official OpenAPI specs** — drop in a new spec and the tools rebuild themselves. No per-version Python, no codegen.
 
-**Documentation:** <https://thomaschristory.github.io/catalyst-sdwan-super-mcp/>
+📖 **Documentation:** <https://thomaschristory.github.io/catalyst-sdwan-super-mcp/>
 
 ---
 
-## Try it in 60 seconds against the Cisco DevNet sandbox
+## Quick start
+
+Run it with [`uvx`](https://docs.astral.sh/uv/) — no clone, no install. The credentials below are Cisco's public, always-on **DevNet sandbox**, so this is a true end-to-end trial without a vManage of your own:
 
 ```bash
-git clone https://github.com/thomaschristory/catalyst-sdwan-super-mcp.git
-cd catalyst-sdwan-super-mcp
-uv sync
-
-# Credentials for Cisco's public always-on SD-WAN sandbox
-cat > .env <<'EOF'
-VMANAGE_USERNAME=devnetuser
-VMANAGE_PASSWORD=RG!_Yw919_83
-EOF
-
-uv run sdwan-mcp        # stdio, read-only, adaptive tool splitting (default)
+VMANAGE_USERNAME=devnetuser VMANAGE_PASSWORD='RG!_Yw919_83' \
+  VMANAGE_VERIFY_SSL=false uvx catalyst-sdwan-super-mcp
 ```
 
-The shipped `sdwan-mcp.yaml` points at `sandbox-sdwan-2.cisco.com` and ships specs for vManage 20.15, 20.16, and 20.18 in `specs/`. 20.18 is the default. You don't need a vManage of your own to try it.
+That boots the server in **stdio, read-only** mode against `sandbox-sdwan-2.cisco.com` with adaptive tool splitting on. On first run it auto-fetches the vManage **20.18** OpenAPI spec from Cisco DevNet (the default version). `VMANAGE_VERIFY_SSL=false` is needed only because the sandbox uses a self-signed certificate — drop it for a production vManage with a valid cert.
 
-**Supported vManage versions: 20.15+.** Older releases are out of scope — see [issue #13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13).
-
-### Install from PyPI
+Prefer a persistent install?
 
 ```bash
-uv tool install catalyst-sdwan-super-mcp
+pipx install catalyst-sdwan-super-mcp      # or: uv tool install catalyst-sdwan-super-mcp
 sdwan-mcp --help
 ```
 
-The PyPI package ships the server only — no bundled specs. On first run the loader auto-fetches the spec for `sdwan.active_version` from `developer.cisco.com` and writes it under `sdwan.specs_dir` (set `sdwan.auto_fetch: false` to opt out, e.g. for air-gapped deployments). For predictable behaviour you can pre-warm with `sdwan-mcp fetch --version 20.18`. Full instructions: [docs/getting-started/install.md](docs/getting-started/install.md).
+> **Supported vManage versions: 20.15+.** Older releases are out of scope — see [issue #13](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues/13).
+
+---
+
+## Add it to your MCP client
+
+Every block below uses the published CLI — no source checkout, no absolute paths to wrangle. Swap the DevNet sandbox values for your own `VMANAGE_HOST` / credentials (full config in the [docs](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/reference/configuration/)).
+
+### Claude Code
+
+One command:
+
+```bash
+claude mcp add sdwan \
+  -e VMANAGE_USERNAME=devnetuser \
+  -e VMANAGE_PASSWORD='RG!_Yw919_83' \
+  -e VMANAGE_VERIFY_SSL=false \
+  -- uvx catalyst-sdwan-super-mcp
+```
+
+…or commit a project-local `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "sdwan": {
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
+      "env": {
+        "VMANAGE_USERNAME": "devnetuser",
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`), then restart Claude Desktop — `sdwan` shows up in the MCP indicator:
+
+```json
+{
+  "mcpServers": {
+    "sdwan": {
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
+      "env": {
+        "VMANAGE_USERNAME": "devnetuser",
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
+
+```json
+{
+  "mcpServers": {
+    "sdwan": {
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
+      "env": {
+        "VMANAGE_USERNAME": "devnetuser",
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
+      }
+    }
+  }
+}
+```
+
+### Any other stdio client (Cline, Continue, Windsurf, Zed, …)
+
+Same shape everywhere: point the client at the `uvx catalyst-sdwan-super-mcp` command with `VMANAGE_*` in the environment.
+
+> **Tips**
+> - **`VMANAGE_VERIFY_SSL=false`** is included because the DevNet sandbox uses a self-signed cert. Drop it (or set `true`) when pointing at a production vManage with a valid certificate.
+> - **Installed the package?** Replace `"command": "uvx", "args": ["catalyst-sdwan-super-mcp"]` with `"command": "sdwan-mcp", "args": []`.
+> - **Need writes?** Add `"--read-write"` to `args` (off by default — see below).
+> - **Network transport / bearer auth?** SSE and streamable-HTTP setups live in [docs/guides/mcp-clients.md](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/guides/mcp-clients/).
 
 ---
 
 ## What you get
 
 - **Adaptive tool splitting.** A size-driven splitter (`max_actions_per_tool`, default 150) chops huge OpenAPI sections into right-sized tools — 360 tools on 20.18 RW out of the box, all under the cap. See [docs/guides/tool-splitting.md](docs/guides/tool-splitting.md).
-- **Read-only by default.** `--read-write` registers POST/PUT/DELETE/PATCH explicitly.
+- **Read-only by default.** `--read-write` registers POST/PUT/DELETE/PATCH explicitly. Write tools are never even put in the LLM's context in RO mode.
 - **Two auth modes to vManage:** JWT (vManage 20.18.1+) and JSESSIONID + XSRF (older).
 - **Three transports:** stdio, SSE, streamable-HTTP. The HTTP transports ship with first-class **bearer-token auth** (`transport.auth.type: bearer`) and auto-demote non-loopback binds to `127.0.0.1` when no auth is configured. See [docs/guides/mcp-clients.md](docs/guides/mcp-clients.md).
 - **Response pagination** for bulk endpoints. The dispatcher auto-follows scroll and offset endpoints up to a configurable cap and returns a stitched payload with a resumable cursor. See [docs/guides/pagination.md](docs/guides/pagination.md).
@@ -96,8 +173,31 @@ LLM ──(MCP)──► FastMCP ──► tools.py ──► dispatcher.py ─�
 
 ---
 
+## Develop / hack on it
+
+The PyPI package ships the server only; clone the repo if you want the bundled specs (20.15 / 20.16 / 20.18), the test suite, or the docs site:
+
+```bash
+git clone https://github.com/thomaschristory/catalyst-sdwan-super-mcp.git
+cd catalyst-sdwan-super-mcp
+uv sync --group dev --group docs
+uv run sdwan-mcp --help
+uv run pytest
+```
+
+Contribution guidelines, the release process, and the security posture for fork PRs live in [docs/contributing/](docs/contributing/development.md).
+
+---
+
 ## Status
 
-Pre-1.0. Read-only is the safe default and the recommended starting posture; `--read-write` opt-in is exercised against the DevNet sandbox. Released versions are tagged on [PyPI](https://pypi.org/project/catalyst-sdwan-super-mcp/) and tracked in [CHANGELOG.md](CHANGELOG.md). Open work is on the [issue tracker](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues).
+Actively maintained and published on [PyPI](https://pypi.org/project/catalyst-sdwan-super-mcp/). Pre-1.0 — under [semver](https://semver.org/) that means minor releases may change behavior, so pin a version in production. What's solid today:
+
+- **Read-only by default** — mutations require an explicit `--read-write`, the recommended starting posture.
+- Dynamic tool generation from the official vManage OpenAPI specs (20.15 / 20.16 / 20.18), with on-demand auto-fetch for newer versions.
+- JWT **and** session auth to vManage; stdio, SSE, and streamable-HTTP transports, with bearer-token auth on the HTTP ones.
+- Response pagination, configurable retry/timeout, and an opt-in [debug capture](docs/reference/configuration.md) of the upstream exchange for diagnosing opaque vManage errors.
+
+Releases are tagged on PyPI and recorded in [CHANGELOG.md](CHANGELOG.md); open work is on the [issue tracker](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/issues). Contributions welcome.
 
 License: Apache 2.0.
