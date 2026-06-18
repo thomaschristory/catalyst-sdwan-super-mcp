@@ -2,22 +2,33 @@
 
 **Supports vManage 20.15+.** Older releases are out of scope.
 
-## From PyPI (recommended)
+## Run it without installing (recommended)
+
+The fastest path is [`uvx`](https://docs.astral.sh/uv/), which fetches and runs the
+published package in one step — nothing to install or clean up:
+
+```bash
+uvx catalyst-sdwan-super-mcp --help
+```
+
+This is also the form used in the [MCP client config](../guides/mcp-clients.md)
+blocks, so your editor launches the server the same way.
+
+## Install persistently
+
+For a long-lived CLI on your `PATH`:
 
 ```bash
 uv tool install catalyst-sdwan-super-mcp
-sdwan-mcp --help
-```
-
-Or with pip / pipx:
-
-```bash
+# or
 pipx install catalyst-sdwan-super-mcp
 # or
 pip install catalyst-sdwan-super-mcp
+
+sdwan-mcp --help
 ```
 
-The PyPI install ships the package only. No specs are bundled — on first startup the loader auto-fetches the spec for `sdwan.active_version` (>= 20.16) from `developer.cisco.com` into `sdwan.specs_dir`. Override this behaviour with `sdwan.auto_fetch: false` (air-gapped) or pre-warm with `sdwan-mcp fetch --version <V>`. See [Spec versions](../guides/spec-versions.md) for details.
+Whichever you pick, the PyPI distribution ships the package only. No specs are bundled — on first startup the loader auto-fetches the spec for `sdwan.active_version` (>= 20.16) from `developer.cisco.com` into `sdwan.specs_dir`. Override this behaviour with `sdwan.auto_fetch: false` (air-gapped) or pre-warm with `sdwan-mcp fetch --version <V>`. See [Spec versions](../guides/spec-versions.md) for details.
 
 ## From source (for development or to get the bundled specs)
 

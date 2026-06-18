@@ -15,7 +15,17 @@ Cisco DevNet provides a public **always-on SD-WAN sandbox** you can point this M
 
 Reservation page: <https://developer.cisco.com/sdwan/sandbox/> — check the listed version there and pick the matching folder under `specs/`.
 
-## Config
+## Fastest path: no clone
+
+The sandbox host and `active_version: "20.18"` are the built-in defaults, so a
+one-liner with [`uvx`](https://docs.astral.sh/uv/) connects straight away:
+
+```bash
+VMANAGE_USERNAME=devnetuser VMANAGE_PASSWORD='RG!_Yw919_83' \
+  uvx catalyst-sdwan-super-mcp
+```
+
+## From a source checkout
 
 The repo's `sdwan-mcp.yaml` ships pointing at this host with `active_version: "20.18"`. Just set credentials in `.env`:
 
@@ -33,7 +43,7 @@ Then:
 uv run sdwan-mcp
 ```
 
-If the sandbox version differs from the default, override at the command line:
+If the sandbox version differs from the default, override at the command line (drop the `uv run` prefix when using an installed CLI or `uvx catalyst-sdwan-super-mcp`):
 
 ```bash
 uv run sdwan-mcp --version 20.15

@@ -1,11 +1,16 @@
 # First run
 
+The commands below assume an installed CLI (`sdwan-mcp`, via `uv tool install` /
+`pipx`). Running from a source checkout? Prefix each with `uv run`
+(`uv run sdwan-mcp …`). Running without installing? Use
+`uvx catalyst-sdwan-super-mcp …`.
+
 ## Run as stdio (Claude Desktop)
 
 Default transport — no network ports, the MCP client spawns the server as a subprocess.
 
 ```bash
-uv run sdwan-mcp
+sdwan-mcp
 ```
 
 You should see something like:
@@ -27,7 +32,7 @@ You should see something like:
 ## Run as SSE (network-accessible)
 
 ```bash
-uv run sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
+sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
 ```
 
 ## Enable writes
@@ -35,7 +40,7 @@ uv run sdwan-mcp --transport sse --host 0.0.0.0 --port 8000
 Off by default. Pass `--read-write` to register POST/PUT/DELETE/PATCH:
 
 ```bash
-uv run sdwan-mcp --read-write
+sdwan-mcp --read-write
 ```
 
 ⚠ Writes are real: they mutate your vManage. Don't aim this at production until you've practiced on the [DevNet sandbox](sandbox.md).
@@ -43,7 +48,7 @@ uv run sdwan-mcp --read-write
 ## Diff two spec versions
 
 ```bash
-uv run sdwan-mcp --diff 20.15 20.18
+sdwan-mcp --diff 20.15 20.18
 ```
 
 Outputs added/removed operations and parameter drift.
