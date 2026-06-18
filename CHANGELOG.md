@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-18
+
+Closes the [v0.6.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/13) (#80).
+
+### Docs
+
+- **Modernized the README and docs onboarding (#80).** The quick start now leads
+  with `uvx catalyst-sdwan-super-mcp` (zero-install) and `pipx` / `uv tool install`
+  for a persistent CLI, instead of `git clone` + `uv sync`; the source checkout is
+  demoted to a "Develop / hack on it" note. Added an "Add it to your MCP client"
+  section with copy-paste config for Claude Code (`claude mcp add` + `.mcp.json`),
+  Claude Desktop, Cursor, and other stdio clients — all launching via the published
+  CLI. Sandbox examples now pass `VMANAGE_VERIFY_SSL=false` (the sandbox uses a
+  self-signed cert and a `uvx` run has no `sdwan-mcp.yaml` to set it). Rewrote the
+  stale `Status` section to reflect actual maturity. The docs site
+  (`install`, `first-run`, `sandbox`, `mcp-clients`) was updated to match.
+
 ## [0.6.0] - 2026-06-17
 
 Closes the [v0.6.0 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/12) (#78).
