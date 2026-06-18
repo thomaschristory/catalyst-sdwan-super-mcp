@@ -12,6 +12,7 @@ The image is multi-stage and uses `uv` for fast deterministic installs.
 
 ```bash
 docker run -i --rm \
+  -e VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
   -v "$(pwd)/specs:/app/specs" \
@@ -24,6 +25,7 @@ The `-i` keeps stdin open so the MCP client can talk to the server over its stan
 
 ```bash
 docker run -p 8000:8000 \
+  -e VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
   -v "$(pwd)/specs:/app/specs" \
@@ -35,6 +37,7 @@ docker run -p 8000:8000 \
 
 ```bash
 docker run -p 8000:8000 \
+  -e VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
   -v "$(pwd)/specs:/app/specs" \

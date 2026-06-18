@@ -19,6 +19,7 @@ Tools are **generated dynamically from the official OpenAPI specs** — drop in 
 Run it with [`uvx`](https://docs.astral.sh/uv/) — no clone, no install. The credentials below are Cisco's public, always-on **DevNet sandbox**, so this is a true end-to-end trial without a vManage of your own:
 
 ```bash
+VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
 VMANAGE_USERNAME=devnetuser VMANAGE_PASSWORD='RG!_Yw919_83' \
   VMANAGE_VERIFY_SSL=false uvx catalyst-sdwan-super-mcp
 ```
@@ -46,6 +47,7 @@ One command:
 
 ```bash
 claude mcp add sdwan \
+  -e VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
   -e VMANAGE_VERIFY_SSL=false \
@@ -61,6 +63,7 @@ claude mcp add sdwan \
       "command": "uvx",
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
+        "VMANAGE_HOST": "sandbox-sdwan-2.cisco.com",
         "VMANAGE_USERNAME": "devnetuser",
         "VMANAGE_PASSWORD": "RG!_Yw919_83",
         "VMANAGE_VERIFY_SSL": "false"
@@ -81,6 +84,7 @@ Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
       "command": "uvx",
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
+        "VMANAGE_HOST": "sandbox-sdwan-2.cisco.com",
         "VMANAGE_USERNAME": "devnetuser",
         "VMANAGE_PASSWORD": "RG!_Yw919_83",
         "VMANAGE_VERIFY_SSL": "false"
@@ -101,6 +105,7 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
       "command": "uvx",
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
+        "VMANAGE_HOST": "sandbox-sdwan-2.cisco.com",
         "VMANAGE_USERNAME": "devnetuser",
         "VMANAGE_PASSWORD": "RG!_Yw919_83",
         "VMANAGE_VERIFY_SSL": "false"

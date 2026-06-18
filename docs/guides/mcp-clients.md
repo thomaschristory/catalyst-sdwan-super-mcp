@@ -90,6 +90,7 @@ One command:
 
 ```bash
 claude mcp add sdwan \
+  -e VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
   -e VMANAGE_VERIFY_SSL=false \
@@ -107,6 +108,7 @@ claude mcp add sdwan \
       "command": "uvx",
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
+        "VMANAGE_HOST": "sandbox-sdwan-2.cisco.com",
         "VMANAGE_USERNAME": "devnetuser",
         "VMANAGE_PASSWORD": "RG!_Yw919_83",
         "VMANAGE_VERIFY_SSL": "false"
@@ -127,6 +129,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
       "command": "uvx",
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
+        "VMANAGE_HOST": "sandbox-sdwan-2.cisco.com",
         "VMANAGE_USERNAME": "devnetuser",
         "VMANAGE_PASSWORD": "RG!_Yw919_83",
         "VMANAGE_VERIFY_SSL": "false"
@@ -149,6 +152,7 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
       "command": "uvx",
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
+        "VMANAGE_HOST": "sandbox-sdwan-2.cisco.com",
         "VMANAGE_USERNAME": "devnetuser",
         "VMANAGE_PASSWORD": "RG!_Yw919_83",
         "VMANAGE_VERIFY_SSL": "false"
@@ -170,6 +174,7 @@ Other stdio clients (Cline, Continue, Windsurf, Zed, …) use the same shape: th
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "-e", "VMANAGE_HOST",
         "-e", "VMANAGE_USERNAME",
         "-e", "VMANAGE_PASSWORD",
         "-v", "/absolute/path/to/specs:/app/specs",

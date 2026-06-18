@@ -17,10 +17,13 @@ Reservation page: <https://developer.cisco.com/sdwan/sandbox/> — check the lis
 
 ## Fastest path: no clone
 
-The sandbox host and `active_version: "20.18"` are the built-in defaults, so a
-one-liner with [`uvx`](https://docs.astral.sh/uv/) connects straight away:
+`active_version: "20.18"` is the built-in default, so once you set the host and
+credentials a one-liner with [`uvx`](https://docs.astral.sh/uv/) connects straight
+away (the host is also the default, but it's shown explicitly here so the example
+is self-contained):
 
 ```bash
+VMANAGE_HOST=sandbox-sdwan-2.cisco.com \
 VMANAGE_USERNAME=devnetuser VMANAGE_PASSWORD='RG!_Yw919_83' \
   VMANAGE_VERIFY_SSL=false uvx catalyst-sdwan-super-mcp
 ```
