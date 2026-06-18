@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-06-18
+
+Closes the [v0.6.3 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/15) (#86).
+
+### Docs
+
+- **Made the sandbox host explicit in every example (#86).** The DevNet-sandbox
+  quick-start and MCP-client blocks set credentials but relied on
+  `sandbox-sdwan-2.cisco.com` being the built-in config default rather than
+  naming it, so a reader couldn't tell which vManage the example targeted. Added
+  `VMANAGE_HOST=sandbox-sdwan-2.cisco.com` to the README headline command,
+  `claude mcp add`, and every `.mcp.json` `env` block, plus the `docker run`
+  examples and the Docker passthrough block in the docs. The
+  credentials-only configuration-reference snippet stays host-less on purpose —
+  it demonstrates that host/version have built-in defaults.
+
 ## [0.6.2] - 2026-06-18
 
 Closes the [v0.6.2 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/14) (#83).
