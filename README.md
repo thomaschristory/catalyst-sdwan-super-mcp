@@ -38,7 +38,7 @@ sdwan-mcp --help
 
 ## Add it to your MCP client
 
-Every block below uses the published CLI — no source checkout, no absolute paths to wrangle. Swap the DevNet sandbox values for your own `VMANAGE_HOST` / credentials (full config in the [docs](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/reference/configuration/)).
+Every block below uses the published CLI — no source checkout, no absolute paths to wrangle. The examples target the DevNet sandbox; to use **your own vManage**, swap in `VMANAGE_HOST` (and friends) as shown in [Point at your own vManage](#point-at-your-own-vmanage) below.
 
 ### Claude Code
 
@@ -119,6 +119,45 @@ Same shape everywhere: point the client at the `uvx catalyst-sdwan-super-mcp` co
 > - **Installed the package?** Replace `"command": "uvx", "args": ["catalyst-sdwan-super-mcp"]` with `"command": "sdwan-mcp", "args": []`.
 > - **Need writes?** Add `"--read-write"` to `args` (off by default — see below).
 > - **Network transport / bearer auth?** SSE and streamable-HTTP setups live in [docs/guides/mcp-clients.md](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/guides/mcp-clients/).
+
+### Point at your own vManage
+
+The host defaults to the DevNet sandbox. To target your own controller, set
+`VMANAGE_HOST` (and `VMANAGE_PORT` if it isn't `443`). With a valid TLS
+certificate, leave SSL verification on — i.e. drop `VMANAGE_VERIFY_SSL` entirely
+or set it to `true`:
+
+```bash
+VMANAGE_HOST=vmanage.example.com \
+VMANAGE_PORT=443 \
+VMANAGE_USERNAME=your-user \
+VMANAGE_PASSWORD='your-pass' \
+  uvx catalyst-sdwan-super-mcp
+```
+
+The same keys go in any client's `env` block — e.g. for `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "sdwan": {
+      "command": "uvx",
+      "args": ["catalyst-sdwan-super-mcp"],
+      "env": {
+        "VMANAGE_HOST": "vmanage.example.com",
+        "VMANAGE_PORT": "443",
+        "VMANAGE_USERNAME": "your-user",
+        "VMANAGE_PASSWORD": "your-pass"
+      }
+    }
+  }
+}
+```
+
+`VMANAGE_USE_JWT` (default `true`; set `false` for the legacy session login) and
+`VMANAGE_TIMEOUT` round out the connection settings. Full reference, including the
+optional `sdwan-mcp.yaml` equivalents and `${ENV}` interpolation, in the
+[configuration docs](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/reference/configuration/).
 
 ---
 
