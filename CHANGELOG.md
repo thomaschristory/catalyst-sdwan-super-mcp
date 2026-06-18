@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-18
+
+Closes the [v0.6.2 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/14) (#83).
+
+### Docs
+
+- **Documented how to point the server at your own vManage (#83).** After the
+  v0.6.1 onboarding rewrite, every quick-start and MCP-client block used the
+  DevNet sandbox defaults, so a user targeting their own controller had no
+  concrete example. Added a "Point at your own vManage" section to the README
+  (env-var command + `.mcp.json` `env` block with `VMANAGE_HOST` / `VMANAGE_PORT`,
+  SSL verification left on for valid certs) and an env-var form to the docs
+  "Configure your vManage" section, cross-linking the configuration reference.
+
 ## [0.6.1] - 2026-06-18
 
 Closes the [v0.6.1 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/13) (#80).
