@@ -56,7 +56,24 @@ The `.env` file is loaded automatically at startup. Never commit it.
 
 ## Configure your vManage
 
-Edit `sdwan-mcp.yaml`:
+The host defaults to the DevNet sandbox (`sandbox-sdwan-2.cisco.com`). To point at
+your own controller, set the connection settings — either as environment variables
+(the natural choice for a `uvx` / installed-CLI launch with no config file) or in
+`sdwan-mcp.yaml`.
+
+Environment variables:
+
+```bash
+export VMANAGE_HOST=vmanage.example.com   # your vManage hostname
+export VMANAGE_PORT=443                    # or 8443, etc.
+export VMANAGE_USERNAME=your-user
+export VMANAGE_PASSWORD='your-pass'
+# VMANAGE_VERIFY_SSL=true is the default (valid cert) — set false only for self-signed
+# VMANAGE_USE_JWT=true is the default — set false to force the legacy JSESSIONID + XSRF login
+# VMANAGE_TIMEOUT overrides the request timeout (seconds)
+```
+
+Or `sdwan-mcp.yaml`:
 
 ```yaml
 vmanage:
@@ -70,6 +87,8 @@ sdwan:
   active_version: "20.18"        # must match a folder in specs/
   max_actions_per_tool: 150      # default; 0 disables splitting (see guides/tool-splitting.md)
 ```
+
+CLI flags > env vars > YAML > defaults. See the [configuration reference](../reference/configuration.md) for the full table.
 
 ## Get the OpenAPI specs
 
