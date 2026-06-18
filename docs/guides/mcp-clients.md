@@ -174,6 +174,7 @@ Other stdio clients (Cline, Continue, Windsurf, Zed, …) use the same shape: th
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "-e", "VMANAGE_HOST",
         "-e", "VMANAGE_USERNAME",
         "-e", "VMANAGE_PASSWORD",
         "-v", "/absolute/path/to/specs:/app/specs",
