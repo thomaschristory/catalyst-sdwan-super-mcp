@@ -20,10 +20,10 @@ Run it with [`uvx`](https://docs.astral.sh/uv/) — no clone, no install. The cr
 
 ```bash
 VMANAGE_USERNAME=devnetuser VMANAGE_PASSWORD='RG!_Yw919_83' \
-  uvx catalyst-sdwan-super-mcp
+  VMANAGE_VERIFY_SSL=false uvx catalyst-sdwan-super-mcp
 ```
 
-That boots the server in **stdio, read-only** mode against `sandbox-sdwan-2.cisco.com` with adaptive tool splitting on. On first run it auto-fetches the vManage **20.18** OpenAPI spec from Cisco DevNet (the default version).
+That boots the server in **stdio, read-only** mode against `sandbox-sdwan-2.cisco.com` with adaptive tool splitting on. On first run it auto-fetches the vManage **20.18** OpenAPI spec from Cisco DevNet (the default version). `VMANAGE_VERIFY_SSL=false` is needed only because the sandbox uses a self-signed certificate — drop it for a production vManage with a valid cert.
 
 Prefer a persistent install?
 
@@ -48,6 +48,7 @@ One command:
 claude mcp add sdwan \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
+  -e VMANAGE_VERIFY_SSL=false \
   -- uvx catalyst-sdwan-super-mcp
 ```
 
@@ -61,7 +62,8 @@ claude mcp add sdwan \
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
@@ -80,7 +82,8 @@ Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
@@ -99,7 +102,8 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
@@ -111,6 +115,7 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
 Same shape everywhere: point the client at the `uvx catalyst-sdwan-super-mcp` command with `VMANAGE_*` in the environment.
 
 > **Tips**
+> - **`VMANAGE_VERIFY_SSL=false`** is included because the DevNet sandbox uses a self-signed cert. Drop it (or set `true`) when pointing at a production vManage with a valid certificate.
 > - **Installed the package?** Replace `"command": "uvx", "args": ["catalyst-sdwan-super-mcp"]` with `"command": "sdwan-mcp", "args": []`.
 > - **Need writes?** Add `"--read-write"` to `args` (off by default — see below).
 > - **Network transport / bearer auth?** SSE and streamable-HTTP setups live in [docs/guides/mcp-clients.md](https://thomaschristory.github.io/catalyst-sdwan-super-mcp/guides/mcp-clients/).

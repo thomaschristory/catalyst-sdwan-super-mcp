@@ -22,8 +22,10 @@ one-liner with [`uvx`](https://docs.astral.sh/uv/) connects straight away:
 
 ```bash
 VMANAGE_USERNAME=devnetuser VMANAGE_PASSWORD='RG!_Yw919_83' \
-  uvx catalyst-sdwan-super-mcp
+  VMANAGE_VERIFY_SSL=false uvx catalyst-sdwan-super-mcp
 ```
+
+`VMANAGE_VERIFY_SSL=false` is required here because the sandbox serves a self-signed certificate (the table above) — the bundled `sdwan-mcp.yaml` sets it for the source-checkout flow, but a `uvx` run from an arbitrary directory has no config file, so pass it on the command line.
 
 ## From a source checkout
 

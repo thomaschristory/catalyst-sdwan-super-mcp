@@ -92,8 +92,11 @@ One command:
 claude mcp add sdwan \
   -e VMANAGE_USERNAME=devnetuser \
   -e VMANAGE_PASSWORD='RG!_Yw919_83' \
+  -e VMANAGE_VERIFY_SSL=false \
   -- uvx catalyst-sdwan-super-mcp
 ```
+
+(`VMANAGE_VERIFY_SSL=false` is only for the self-signed DevNet sandbox — omit it for a production vManage with a valid certificate.)
 
 …or commit a project-local `.mcp.json` (global config: `~/.claude/mcp.json`):
 
@@ -105,7 +108,8 @@ claude mcp add sdwan \
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
@@ -124,7 +128,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
@@ -145,7 +150,8 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
       "args": ["catalyst-sdwan-super-mcp"],
       "env": {
         "VMANAGE_USERNAME": "devnetuser",
-        "VMANAGE_PASSWORD": "RG!_Yw919_83"
+        "VMANAGE_PASSWORD": "RG!_Yw919_83",
+        "VMANAGE_VERIFY_SSL": "false"
       }
     }
   }
