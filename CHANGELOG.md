@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-07-03
+
+Closes the [v0.6.4 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/16) (#93).
+
 ### Fixed
 
 - **Auto-recover from legacy session timeout without a restart (#93).** In
