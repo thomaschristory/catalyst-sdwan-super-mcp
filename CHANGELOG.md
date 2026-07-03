@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auto-recover from legacy session timeout without a restart (#93).** In
+  session mode (`use_jwt: false`, the DevNet-sandbox/20.15 default), an expired
+  `JSESSIONID` does not produce a clean `302`/`401` for API calls — vManage
+  answers with an HTTP 200 whose body is the login page. `is_session_expired()`
+  only recognised the `302→welcome.html` and `401` signals, so that login HTML
+  slipped through as "data", the existing re-auth retry never fired, and the
+  session stayed dead until the server was manually restarted (confusing LLM
+  agents mid-session). Detection now also treats a 2xx carrying the vManage
+  login markers (`welcome.html` / `j_security_check`) as expiry, so the existing
+  retry-once re-login path recovers transparently. Fail-safe: JSON/text API
+  successes are rejected by content-type before the body is inspected, and an
+  HTML body without the login markers is left alone, so no genuine response can
+  trip it. JWT mode is unaffected (it already gets a 401 on expiry).
+
 ## [0.6.3] - 2026-06-18
 
 Closes the [v0.6.3 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/15) (#86).

@@ -178,7 +178,7 @@ wheels = [
 
 [[package]]
 name = "catalyst-sdwan-super-mcp"
-version = "0.6.0"
+version = "0.6.3"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
