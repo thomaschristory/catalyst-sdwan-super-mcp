@@ -19,9 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agents mid-session). Detection now also treats a 2xx carrying the vManage
   login markers (`welcome.html` / `j_security_check`) as expiry, so the existing
   retry-once re-login path recovers transparently. Fail-safe: JSON/text API
-  successes are rejected by content-type before the body is inspected, and an
-  HTML body without the login markers is left alone, so no genuine response can
-  trip it. JWT mode is unaffected (it already gets a 401 on expiry).
+  successes are rejected by content-type before the body is inspected, and the
+  login markers are anchored (the `j_security_check` form action, or a
+  `url=`/`href=` redirect to `welcome.html`) so the HTML device-config endpoint
+  (`GET /device/config/html`) can't be misread as a login page and discarded. If
+  re-authentication succeeds but the retry is still a login page (e.g. a
+  concurrent-session limit on shared credentials), a real error is returned
+  rather than the internal sentinel. JWT mode is unaffected (it already gets a
+  401 on expiry).
 
 ## [0.6.3] - 2026-06-18
 

@@ -426,6 +426,44 @@ async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_mode_persistent_login_page_returns_error(specs_dir: Path) -> None:
+    """If re-login succeeds but the retry is STILL a login page (e.g. a
+    concurrent-session limit keeps evicting us), the dispatcher must return a
+    real error — never leak the internal `_session_expired` sentinel to the
+    caller/LLM (#93 review)."""
+    index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
+    auth = VManageAuth(
+        host="vm.test", port=8443, username="admin", password="pwd",
+        verify_ssl=False, use_jwt=False,
+    )
+    auth._session_id = "stale"
+    auth._xsrf_token = "stale-xsrf"
+
+    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d.set_index(index)
+
+    with respx.mock(assert_all_called=True) as router:
+        api = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
+            return_value=httpx.Response(200, html=_LOGIN_PAGE_HTML)  # always a login page
+        )
+        router.post("https://vm.test:8443/j_security_check").mock(
+            return_value=httpx.Response(
+                200, text="", headers={"Set-Cookie": "JSESSIONID=fresh; Path=/"}
+            )
+        )
+        router.get("https://vm.test:8443/dataservice/client/token").mock(
+            return_value=httpx.Response(200, text="fresh-xsrf")
+        )
+        result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
+
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+    assert "_session_expired" not in result  # sentinel never leaks
+    assert "re-authentication" in result["message"].lower()
+    assert api.call_count == 2  # bounded: one original + one post-reauth retry
+
+
+@pytest.mark.asyncio
 async def test_session_mode_no_reauth_on_normal_200(specs_dir: Path) -> None:
     """Guard: a normal JSON 200 in session mode must NOT trigger a re-login."""
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()

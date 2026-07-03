@@ -22,6 +22,7 @@ Set use_jwt: false in sdwan-mcp.yaml to force session mode.
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 
 import httpx
@@ -33,20 +34,32 @@ REFRESH_MARGIN_SECONDS = 120
 DEFAULT_TOKEN_LIFETIME_SECONDS = 1800
 
 
-# Markers that identify a vManage login page returned in a response body: the
-# post-login redirect target and the login form's action. Both are distinctive
-# to the auth flow — dataservice API responses never contain them — so keying on
-# either keeps the 2xx-login-page detection (#93) fail-safe.
-_LOGIN_PAGE_MARKERS = ("welcome.html", "j_security_check")
+# Anchored markers that identify a vManage login page in a response body:
+#   - the login form's POST target (j_security_check — a servlet path that never
+#     appears in API or device-config data), or
+#   - a redirect to welcome.html anchored to a url/href/location attribute.
+# Anchoring matters (#93 review): the read-only endpoint GET /device/config/html
+# renders a device running-config as HTML whose text can incidentally contain
+# the bare string "welcome.html" (e.g. an `ip http` redirect line). A loose
+# substring match would misclassify that valid config as an expired session and
+# discard it. Requiring the login-form action or an attribute-anchored redirect
+# keeps the 2xx-login-page detection fail-safe.
+_LOGIN_FORM_RE = re.compile(r"j_security_check", re.IGNORECASE)
+_WELCOME_REDIRECT_RE = re.compile(
+    r"(?:url|href|location(?:\.href)?)\s*[=:]\s*['\"]?[^'\"<>\s]*welcome\.html",
+    re.IGNORECASE,
+)
 
 
 def _looks_like_login_page(response: httpx.Response) -> bool:
     """True if ``response`` is the vManage HTML login page rather than API data.
 
     Cheap and conservative: JSON responses are rejected outright by content-type
-    before the body is inspected; otherwise the body must both look like HTML and
-    carry a login marker. This is the sole signal for the 20.15 session-timeout
-    case where an expired JSESSIONID yields a 200 login page (#93)."""
+    before the body is inspected; otherwise the body must look like HTML and
+    carry an *anchored* login marker (the form action or a redirect attribute
+    pointing at welcome.html). This is the sole signal for the 20.15
+    session-timeout case where an expired JSESSIONID yields a 200 login
+    page (#93)."""
     content_type = response.headers.get("content-type", "").lower()
     if "json" in content_type:
         return False
@@ -54,8 +67,7 @@ def _looks_like_login_page(response: httpx.Response) -> bool:
     head = body[:1024].lower()
     if "<html" not in head and "text/html" not in content_type:
         return False
-    lowered = body.lower()
-    return any(marker in lowered for marker in _LOGIN_PAGE_MARKERS)
+    return bool(_LOGIN_FORM_RE.search(body) or _WELCOME_REDIRECT_RE.search(body))
 
 
 def require_credentials(username: str, password: str) -> None:

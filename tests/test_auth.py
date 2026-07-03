@@ -61,6 +61,30 @@ def test_not_expired_on_unrelated_html_200() -> None:
     assert _auth().is_session_expired(resp) is False
 
 
+def test_not_expired_on_device_config_html_mentioning_welcome() -> None:
+    """The RO endpoint GET /device/config/html renders a device config as HTML
+    whose text can incidentally contain the bare string 'welcome.html' (e.g. an
+    ip-http redirect line). The anchored marker must NOT trip on that — otherwise
+    a valid config response is discarded and a spurious re-login fires (#93 review)."""
+    config_html = (
+        "<html><body><pre>ip http client source-interface Loopback0\n"
+        "ip http redirect url http://portal.example.com/welcome.html\n"
+        "hostname edge-01</pre></body></html>"
+    )
+    resp = httpx.Response(200, html=config_html)
+    assert _auth().is_session_expired(resp) is False
+
+
+def test_expired_on_welcome_redirect_without_form() -> None:
+    """A pure meta-refresh redirect to welcome.html (no login form) is still an
+    expired session — the redirect is anchored to the refresh url attribute."""
+    redirect = (
+        '<html><head><meta http-equiv="refresh" content="0; url=welcome.html">'
+        "</head></html>"
+    )
+    assert _auth().is_session_expired(httpx.Response(200, html=redirect)) is True
+
+
 def test_not_expired_on_403() -> None:
     """A 403 is a permission/RBAC denial, not a session timeout — must NOT trigger
     re-auth, which would mask the real error."""
