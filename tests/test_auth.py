@@ -78,10 +78,7 @@ def test_not_expired_on_device_config_html_mentioning_welcome() -> None:
 def test_expired_on_welcome_redirect_without_form() -> None:
     """A pure meta-refresh redirect to welcome.html (no login form) is still an
     expired session — the redirect is anchored to the refresh url attribute."""
-    redirect = (
-        '<html><head><meta http-equiv="refresh" content="0; url=welcome.html">'
-        "</head></html>"
-    )
+    redirect = '<html><head><meta http-equiv="refresh" content="0; url=welcome.html"></head></html>'
     assert _auth().is_session_expired(httpx.Response(200, html=redirect)) is True
 
 

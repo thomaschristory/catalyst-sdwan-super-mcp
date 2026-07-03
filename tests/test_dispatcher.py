@@ -392,8 +392,12 @@ async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
     and transparently retry — no restart. Proven end-to-end through call()."""
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
-        host="vm.test", port=8443, username="admin", password="pwd",
-        verify_ssl=False, use_jwt=False,
+        host="vm.test",
+        port=8443,
+        username="admin",
+        password="pwd",
+        verify_ssl=False,
+        use_jwt=False,
     )
     # Pre-populate a (now stale) session so headers() works on the first call.
     auth._session_id = "stale"
@@ -405,7 +409,7 @@ async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
     with respx.mock(assert_all_called=True) as router:
         api = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
             side_effect=[
-                httpx.Response(200, html=_LOGIN_PAGE_HTML),          # stale → login page
+                httpx.Response(200, html=_LOGIN_PAGE_HTML),  # stale → login page
                 httpx.Response(200, json={"deviceId": "10.0.0.1"}),  # after re-login
             ]
         )
@@ -420,9 +424,9 @@ async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
         result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
 
     assert result == {"deviceId": "10.0.0.1"}  # retry payload, not the login HTML
-    assert api.call_count == 2                 # first login page, then success
-    assert login.called and token.called       # one full re-login happened
-    assert auth._xsrf_token == "fresh-xsrf"     # session state refreshed
+    assert api.call_count == 2  # first login page, then success
+    assert login.called and token.called  # one full re-login happened
+    assert auth._xsrf_token == "fresh-xsrf"  # session state refreshed
 
 
 @pytest.mark.asyncio
@@ -433,8 +437,12 @@ async def test_session_mode_persistent_login_page_returns_error(specs_dir: Path)
     caller/LLM (#93 review)."""
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
-        host="vm.test", port=8443, username="admin", password="pwd",
-        verify_ssl=False, use_jwt=False,
+        host="vm.test",
+        port=8443,
+        username="admin",
+        password="pwd",
+        verify_ssl=False,
+        use_jwt=False,
     )
     auth._session_id = "stale"
     auth._xsrf_token = "stale-xsrf"
@@ -468,8 +476,12 @@ async def test_session_mode_no_reauth_on_normal_200(specs_dir: Path) -> None:
     """Guard: a normal JSON 200 in session mode must NOT trigger a re-login."""
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
-        host="vm.test", port=8443, username="admin", password="pwd",
-        verify_ssl=False, use_jwt=False,
+        host="vm.test",
+        port=8443,
+        username="admin",
+        password="pwd",
+        verify_ssl=False,
+        use_jwt=False,
     )
     auth._session_id = "live"
     auth._xsrf_token = "live-xsrf"
