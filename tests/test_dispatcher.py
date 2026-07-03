@@ -376,3 +376,127 @@ def test_stats_hint_500_stats_validation_falls_through_to_500_path() -> None:
     hint = _stats_db_hint(_op("/statistics/x", "post"), 500, body)
     # Not the 400 query-shape hint.
     assert hint is None or "STATS_VALIDATION0001" not in hint
+
+
+# A representative vManage login page returned on a stale JSESSIONID (#93).
+_LOGIN_PAGE_HTML = (
+    '<html><head><meta http-equiv="refresh" content="0; url=welcome.html">'
+    '</head><body><form method="post" action="/j_security_check"></form></body></html>'
+)
+
+
+@pytest.mark.asyncio
+async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
+    """Legacy session mode (#93): a stale session answers an API call with a
+    200 login page (not a 302/401). The dispatcher must detect that, re-login,
+    and transparently retry — no restart. Proven end-to-end through call()."""
+    index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
+    auth = VManageAuth(
+        host="vm.test",
+        port=8443,
+        username="admin",
+        password="pwd",
+        verify_ssl=False,
+        use_jwt=False,
+    )
+    # Pre-populate a (now stale) session so headers() works on the first call.
+    auth._session_id = "stale"
+    auth._xsrf_token = "stale-xsrf"
+
+    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d.set_index(index)
+
+    with respx.mock(assert_all_called=True) as router:
+        api = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
+            side_effect=[
+                httpx.Response(200, html=_LOGIN_PAGE_HTML),  # stale → login page
+                httpx.Response(200, json={"deviceId": "10.0.0.1"}),  # after re-login
+            ]
+        )
+        login = router.post("https://vm.test:8443/j_security_check").mock(
+            return_value=httpx.Response(
+                200, text="", headers={"Set-Cookie": "JSESSIONID=fresh; Path=/"}
+            )
+        )
+        token = router.get("https://vm.test:8443/dataservice/client/token").mock(
+            return_value=httpx.Response(200, text="fresh-xsrf")
+        )
+        result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
+
+    assert result == {"deviceId": "10.0.0.1"}  # retry payload, not the login HTML
+    assert api.call_count == 2  # first login page, then success
+    assert login.called and token.called  # one full re-login happened
+    assert auth._xsrf_token == "fresh-xsrf"  # session state refreshed
+
+
+@pytest.mark.asyncio
+async def test_session_mode_persistent_login_page_returns_error(specs_dir: Path) -> None:
+    """If re-login succeeds but the retry is STILL a login page (e.g. a
+    concurrent-session limit keeps evicting us), the dispatcher must return a
+    real error — never leak the internal `_session_expired` sentinel to the
+    caller/LLM (#93 review)."""
+    index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
+    auth = VManageAuth(
+        host="vm.test",
+        port=8443,
+        username="admin",
+        password="pwd",
+        verify_ssl=False,
+        use_jwt=False,
+    )
+    auth._session_id = "stale"
+    auth._xsrf_token = "stale-xsrf"
+
+    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d.set_index(index)
+
+    with respx.mock(assert_all_called=True) as router:
+        api = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
+            return_value=httpx.Response(200, html=_LOGIN_PAGE_HTML)  # always a login page
+        )
+        router.post("https://vm.test:8443/j_security_check").mock(
+            return_value=httpx.Response(
+                200, text="", headers={"Set-Cookie": "JSESSIONID=fresh; Path=/"}
+            )
+        )
+        router.get("https://vm.test:8443/dataservice/client/token").mock(
+            return_value=httpx.Response(200, text="fresh-xsrf")
+        )
+        result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
+
+    assert isinstance(result, dict)
+    assert result.get("error") is True
+    assert "_session_expired" not in result  # sentinel never leaks
+    assert "re-authentication" in result["message"].lower()
+    assert api.call_count == 2  # bounded: one original + one post-reauth retry
+
+
+@pytest.mark.asyncio
+async def test_session_mode_no_reauth_on_normal_200(specs_dir: Path) -> None:
+    """Guard: a normal JSON 200 in session mode must NOT trigger a re-login."""
+    index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
+    auth = VManageAuth(
+        host="vm.test",
+        port=8443,
+        username="admin",
+        password="pwd",
+        verify_ssl=False,
+        use_jwt=False,
+    )
+    auth._session_id = "live"
+    auth._xsrf_token = "live-xsrf"
+
+    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d.set_index(index)
+
+    with respx.mock(assert_all_called=False) as router:
+        router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
+            return_value=httpx.Response(200, json={"deviceId": "10.0.0.1"})
+        )
+        login = router.post("https://vm.test:8443/j_security_check").mock(
+            return_value=httpx.Response(200)
+        )
+        result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
+
+    assert result == {"deviceId": "10.0.0.1"}
+    assert not login.called  # no re-login on a healthy response

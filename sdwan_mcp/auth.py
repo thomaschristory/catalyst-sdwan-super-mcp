@@ -22,6 +22,7 @@ Set use_jwt: false in sdwan-mcp.yaml to force session mode.
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 
 import httpx
@@ -31,6 +32,42 @@ REFRESH_MARGIN_SECONDS = 120
 
 # Assume this token lifetime if vManage doesn't tell us (30 min is the default)
 DEFAULT_TOKEN_LIFETIME_SECONDS = 1800
+
+
+# Anchored markers that identify a vManage login page in a response body:
+#   - the login form's POST target (j_security_check — a servlet path that never
+#     appears in API or device-config data), or
+#   - a redirect to welcome.html anchored to a url/href/location attribute.
+# Anchoring matters (#93 review): the read-only endpoint GET /device/config/html
+# renders a device running-config as HTML whose text can incidentally contain
+# the bare string "welcome.html" (e.g. an `ip http` redirect line). A loose
+# substring match would misclassify that valid config as an expired session and
+# discard it. Requiring the login-form action or an attribute-anchored redirect
+# keeps the 2xx-login-page detection fail-safe.
+_LOGIN_FORM_RE = re.compile(r"j_security_check", re.IGNORECASE)
+_WELCOME_REDIRECT_RE = re.compile(
+    r"(?:url|href|location(?:\.href)?)\s*[=:]\s*['\"]?[^'\"<>\s]*welcome\.html",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_login_page(response: httpx.Response) -> bool:
+    """True if ``response`` is the vManage HTML login page rather than API data.
+
+    Cheap and conservative: JSON responses are rejected outright by content-type
+    before the body is inspected; otherwise the body must look like HTML and
+    carry an *anchored* login marker (the form action or a redirect attribute
+    pointing at welcome.html). This is the sole signal for the 20.15
+    session-timeout case where an expired JSESSIONID yields a 200 login
+    page (#93)."""
+    content_type = response.headers.get("content-type", "").lower()
+    if "json" in content_type:
+        return False
+    body = response.text or ""
+    head = body[:1024].lower()
+    if "<html" not in head and "text/html" not in content_type:
+        return False
+    return bool(_LOGIN_FORM_RE.search(body) or _WELCOME_REDIRECT_RE.search(body))
 
 
 def require_credentials(username: str, password: str) -> None:
@@ -123,15 +160,29 @@ class VManageAuth:
 
     def is_session_expired(self, response: httpx.Response) -> bool:
         """
-        Detect session expiry — vManage returns a 302 redirect to welcome.html
-        when the session is invalidated. A 401 (e.g. JWT expiry) is also treated
-        as expired regardless of auth mode.
+        Detect session expiry so the dispatcher can re-authenticate and retry.
+
+        Three signals:
+          - a 302 redirect to welcome.html (clean session invalidation),
+          - a 401 (e.g. JWT expiry), regardless of auth mode,
+          - a 2xx whose body is the vManage login page (#93).
+
+        The third signal covers legacy session mode on 20.15: an expired
+        JSESSIONID does NOT yield a 302/401 for API calls — vManage answers with
+        HTTP 200 carrying the login form (the same "returns the login form
+        instead of data" quirk handled at login in ``_login_session``). Without
+        this, that HTML is handed back as if it were data and the session stays
+        dead until the process restarts. Detection is fail-safe: it keys on the
+        vManage login markers in an HTML body, so a genuine JSON/text API success
+        can never trip it (see ``_looks_like_login_page``).
         """
         if response.status_code == 302:
             location = response.headers.get("location", "")
             if "welcome.html" in location:
                 return True
-        return response.status_code == 401
+        if response.status_code == 401:
+            return True
+        return response.status_code < 400 and _looks_like_login_page(response)
 
     async def logout(self, client: httpx.AsyncClient) -> None:
         """Cleanly release the session on the server side (best effort)."""

@@ -206,6 +206,22 @@ class Dispatcher:
             print("[dispatcher] Session expired unexpectedly — re-authenticating")
             await self._auth.login(self._client)
             response = await self._execute(op, params, tool_name)
+            if isinstance(response, dict) and response.get("_session_expired"):
+                # Re-login succeeded but the retry is STILL a login page — e.g.
+                # the session is invalidated again immediately, or a
+                # concurrent-session limit on shared credentials keeps evicting
+                # us. Surface a real error rather than leaking the internal
+                # sentinel to the caller/LLM (#93 review).
+                print("[dispatcher] Still unauthenticated after re-login — giving up")
+                return {
+                    "error": True,
+                    "message": (
+                        "Session expired and re-authentication did not recover it. "
+                        "This can happen with a concurrent-session limit on shared "
+                        "credentials, or if the session is invalidated immediately "
+                        "after login."
+                    ),
+                }
         return response
 
     async def _execute(
