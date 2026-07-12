@@ -31,7 +31,7 @@ sdwan-mcp list-versions [--config PATH]
 | `--diff OLD NEW` | n/a | Print a diff between two spec versions, then exit. |
 | `--max-actions-per-tool N` | from config (`150`) | Cap before the [adaptive splitter](../guides/tool-splitting.md) recurses. `0` disables splitting. |
 | `--insecure-allow-public` | off | Allow binding to a non-loopback host with `transport.auth.type=none`. Without this flag, such a bind is auto-demoted to `127.0.0.1` with a stderr WARNING. Only use this when the server sits behind a trusted authenticating reverse proxy (mTLS, OIDC, a corporate auth gateway). The flag is intentionally verbose to discourage casual use. |
-| `--debug` | off | Capture the upstream vManage request/response on failed calls and surface a redacted `debug` object in the result + stderr. Equivalent to `SDWAN_MCP_DEBUG=1`. See [debug mode](configuration.md#debug--capture-the-upstream-vmanage-exchange-72). |
+| `--debug` | off | Capture the upstream vManage request/response on failed calls and surface a redacted `debug` object in the result + stderr. Equivalent to `SDWAN_MCP_DEBUG=1`. See [debug mode](configuration.md#debug-capture-the-upstream-vmanage-exchange-72). |
 | `--debug-all-calls` | off | With `--debug`: capture every call, not just failures (verbose). Equivalent to `SDWAN_MCP_DEBUG_CAPTURE=all`. |
 | `--debug-no-redact` | off | With `--debug`: do **not** strip auth headers from captured output. Only safe on a trusted local terminal. Equivalent to `SDWAN_MCP_DEBUG_REDACT=0`. |
 | `--version-info` | n/a | Print version and exit. |

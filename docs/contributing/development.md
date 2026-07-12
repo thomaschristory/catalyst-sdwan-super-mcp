@@ -14,7 +14,7 @@ uv sync --group dev --group docs
 uv run pytest -v                    # run the test suite
 uv run ruff check sdwan_mcp tests   # lint
 uv run ruff format sdwan_mcp tests  # format
-uv run mkdocs serve                 # docs live preview at http://localhost:8000
+uv run zensical serve               # docs live preview at http://localhost:8000
 ```
 
 ## What CI enforces
@@ -23,7 +23,7 @@ uv run mkdocs serve                 # docs live preview at http://localhost:8000
 - `mypy --strict` on `sdwan_mcp/`
 - `pytest` on Python 3.11, 3.12, 3.13, both Linux and macOS
 - Docker build + `--help` smoke test
-- `mkdocs build --strict` on every PR that touches docs
+- `zensical build --strict` on every PR that touches docs (validates links **and** anchors)
 
 ## Project layout
 
@@ -41,7 +41,7 @@ sdwan_mcp/          source package
   tools.py          dynamic MCP tool registration
   diff.py           version diff utility
 tests/              pytest suite
-docs/               mkdocs-material site
+docs/               Zensical site (Material theme, mkdocs.yml config)
 specs/{version}/    OpenAPI YAML/JSON, one folder per vManage version
 .github/workflows/  CI: lint, test, docker, docs, release
 ```

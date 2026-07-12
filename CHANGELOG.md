@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Docs now build with [Zensical](https://zensical.org/) instead of MkDocs +
+  Material for MkDocs (#97).** Zensical is the successor to both, from the same
+  team. It reads the existing `mkdocs.yml` natively, so the nav, palette,
+  markdown extensions, and every published URL/anchor carry over untouched — the
+  migration is essentially a dependency and command swap (`mkdocs build --strict`
+  → `zensical build --strict`, `mkdocs serve` → `zensical serve`). Full site
+  build is now ~0.3s. Contributor-facing only; the shipped package is untouched.
+- **Docs adopt Zensical's `modern` theme with the warm "paper" palette (#97),**
+  matching the sister project `panorama-super-cli`. The modern theme paints the
+  top bar from `--md-default-bg-color--light`, so a new `docs/stylesheets/extra.css`
+  sets that variable (plus body/fg/code surfaces) to soften the default
+  black-on-white and white-on-black extremes. The indigo primary/accent from
+  `mkdocs.yml` is left intact.
+
+### Fixed
+
+- **Broken anchor in the CLI reference (#97).** The `--debug` row linked to
+  `configuration.md#debug--capture-the-upstream-vmanage-exchange-72` (doubled
+  hyphen), which matched no heading. MkDocs' `--strict` does not validate anchor
+  fragments, so this shipped to the live site; Zensical's stricter validator
+  flagged it on the first build.
+
 ## [0.6.4] - 2026-07-03
 
 Closes the [v0.6.4 milestone](https://github.com/thomaschristory/catalyst-sdwan-super-mcp/milestone/16) (#93).
