@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   black-on-white and white-on-black extremes. The indigo primary/accent from
   `mkdocs.yml` is left intact.
 
+### Removed
+
+- **`docs/superpowers/` internal planning artifacts (#97).** Four agent-generated
+  implementation plans and design specs from May 2026 lived under `docs/`. They
+  were absent from the `mkdocs.yml` nav, but the site generator builds every
+  `.md` under `docs_dir`, so they were being published to GitHub Pages as
+  unlinked orphan pages. Deleted and added to `.gitignore`; they remain in git
+  history. This also removed the last stale `mkdocs build --strict` references
+  in the repo.
+
 ### Fixed
 
 - **Broken anchor in the CLI reference (#97).** The `--debug` row linked to

@@ -35,3 +35,7 @@ site/
 
 # Claude Code agent state — per-clone, not source-of-truth
 .claude/
+
+# Internal planning artifacts (superpowers plans/specs) — never published
+docs/superpowers/
+superpowers/
