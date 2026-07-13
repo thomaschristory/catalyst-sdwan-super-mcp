@@ -493,7 +493,7 @@ async def _connect_and_register(
 async def _serve(args: argparse.Namespace) -> None:
     """Run async pre-flight and the server itself inside ONE event loop.
 
-    The dispatcher's ``httpx.AsyncClient`` is created and the vManage login
+    The dispatcher's ``httpx2.AsyncClient`` is created and the vManage login
     happens during ``_connect_and_register``. The client (and its anyio-backed
     connection pool) is bound to whatever loop is running at that point, so the
     server MUST be served on the *same* loop. Previously pre-flight ran in its

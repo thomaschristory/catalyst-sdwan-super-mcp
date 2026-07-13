@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import yaml
 
 from .discover import FragmentRef
@@ -50,7 +50,7 @@ class FetchError(RuntimeError):
 
 
 async def fetch_discovery_html(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     *,
     url: str,
 ) -> str:
@@ -59,7 +59,7 @@ async def fetch_discovery_html(
 
 
 async def fetch_fragments(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     *,
     refs: list[FragmentRef],
     concurrency: int = 10,
@@ -85,7 +85,7 @@ async def fetch_fragments(
 
 
 async def _fetch_one_fragment(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     ref: FragmentRef,
     cache_dir: Path | None,
 ) -> dict[str, Any]:
@@ -112,10 +112,10 @@ async def _fetch_one_fragment(
 
 
 async def _request_with_retry(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     method: str,
     url: str,
-) -> httpx.Response:
+) -> httpx2.Response:
     last_exc: Exception | None = None
     for attempt in range(MAX_ATTEMPTS):
         retry_after: float | None = None
@@ -127,7 +127,7 @@ async def _request_with_retry(
                 raise FetchError(f"{method} {url} failed with HTTP {resp.status_code}")
             retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
             last_exc = FetchError(f"{method} {url} returned HTTP {resp.status_code} (retryable)")
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             last_exc = exc
         if attempt < MAX_ATTEMPTS - 1:
             await _sleep_backoff(attempt, override=retry_after)
@@ -213,12 +213,19 @@ def write_yaml(doc: dict[str, Any], target: Path) -> int:
     return len(payload)
 
 
-def make_client(*, timeout: float = 60.0, verify_ssl: bool = True) -> httpx.AsyncClient:
-    """Construct an httpx.AsyncClient pre-configured for DevNet fetches."""
-    return httpx.AsyncClient(
+def make_client(
+    *,
+    timeout: float = 60.0,
+    verify_ssl: bool = True,
+    transport: httpx2.AsyncBaseTransport | None = None,
+) -> httpx2.AsyncClient:
+    """Construct an httpx2.AsyncClient pre-configured for DevNet fetches."""
+    return httpx2.AsyncClient(
         timeout=timeout,
         verify=verify_ssl,
         follow_redirects=True,
         headers={"User-Agent": DEFAULT_USER_AGENT, "Accept": "*/*"},
         http2=False,
+        # None → httpx2 picks its default transport. Tests inject a MockTransport.
+        transport=transport,
     )

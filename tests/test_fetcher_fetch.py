@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
-import respx
 import yaml
 
 from sdwan_mcp.fetcher import (
@@ -25,6 +24,7 @@ from sdwan_mcp.fetcher.fetch import (
     _request_with_retry,
     make_client,
 )
+from tests.mocking import MockRouter
 
 FIXTURES = Path(__file__).parent / "fetcher_fixtures"
 HTML_FIXTURE = FIXTURES / "devnet_minimal.html"
@@ -43,40 +43,40 @@ def _load(name: str) -> dict:
 
 
 @pytest.fixture
-def mocked_devnet(respx_mock: respx.MockRouter) -> respx.MockRouter:
+def mocked_devnet(mock_router: MockRouter) -> MockRouter:
     """Stand in for the entire DevNet + pubhub stack."""
-    respx_mock.get("https://developer.cisco.com/docs/sdwan/20-99/").respond(
+    mock_router.get("https://developer.cisco.com/docs/sdwan/20-99/").respond(
         200, text=HTML_FIXTURE.read_text()
     )
     aaaa = "aaaa1111-1111-1111-1111-111111111111"
     bbbb = "bbbb2222-2222-2222-2222-222222222222"
-    respx_mock.get(_frag_url(aaaa, "apis", "v1/device/get.json")).respond(
+    mock_router.get(_frag_url(aaaa, "apis", "v1/device/get.json")).respond(
         200, json=_load("op_fragment_list.json")
     )
-    respx_mock.get(_frag_url(aaaa, "apis", "v1/device/{deviceId}/get.json")).respond(
+    mock_router.get(_frag_url(aaaa, "apis", "v1/device/{deviceId}/get.json")).respond(
         200, json=_load("op_fragment_get.json")
     )
-    respx_mock.get(_frag_url(aaaa, "apis", "v1/device/{deviceId}/post.json")).respond(
+    mock_router.get(_frag_url(aaaa, "apis", "v1/device/{deviceId}/post.json")).respond(
         200, json=_load("op_fragment_post.json")
     )
-    respx_mock.get(_frag_url(bbbb, "apis", "v1/template/policy/get.json")).respond(
+    mock_router.get(_frag_url(bbbb, "apis", "v1/template/policy/get.json")).respond(
         200, json=_load("op_fragment_policy.json")
     )
-    respx_mock.get(_frag_url(aaaa, "models", "Device.json")).respond(
+    mock_router.get(_frag_url(aaaa, "models", "Device.json")).respond(
         200, json=_load("model_fragment_device.json")
     )
-    respx_mock.get(_frag_url(aaaa, "models", "DeviceList.json")).respond(
+    mock_router.get(_frag_url(aaaa, "models", "DeviceList.json")).respond(
         200, json=_load("model_fragment_devicelist.json")
     )
-    respx_mock.get(_frag_url(bbbb, "models", "Policy.json")).respond(
+    mock_router.get(_frag_url(bbbb, "models", "Policy.json")).respond(
         200, json=_load("model_fragment_policy.json")
     )
-    return respx_mock
+    return mock_router
 
 
 async def test_fetch_version_writes_stitched_yaml(
     tmp_path: Path,
-    mocked_devnet: respx.MockRouter,
+    mocked_devnet: MockRouter,
 ) -> None:
     target = await fetch_version(
         "20.99",
@@ -101,7 +101,7 @@ async def test_fetch_version_writes_stitched_yaml(
 
 async def test_fetch_version_skips_when_cached_and_not_forced(
     tmp_path: Path,
-    mocked_devnet: respx.MockRouter,
+    mocked_devnet: MockRouter,
 ) -> None:
     # First fetch
     target = await fetch_version(
@@ -121,7 +121,7 @@ async def test_fetch_version_skips_when_cached_and_not_forced(
 
 async def test_fetch_version_force_overwrites(
     tmp_path: Path,
-    mocked_devnet: respx.MockRouter,
+    mocked_devnet: MockRouter,
 ) -> None:
     target = await fetch_version(
         "20.99", specs_dir=tmp_path, use_cache=False, log=False, min_paths=1, min_yaml_bytes=0
@@ -141,7 +141,7 @@ async def test_fetch_version_force_overwrites(
 
 async def test_fetch_version_uses_fragment_disk_cache(
     tmp_path: Path,
-    mocked_devnet: respx.MockRouter,
+    mocked_devnet: MockRouter,
 ) -> None:
     cache_root = tmp_path / "frag_cache"
     await fetch_version(
@@ -163,24 +163,24 @@ async def test_fetch_version_uses_fragment_disk_cache(
 
 
 async def test_request_with_retry_eventually_raises(
-    respx_mock: respx.MockRouter, tmp_path: Path
+    mock_router: MockRouter, tmp_path: Path
 ) -> None:
-    respx_mock.get("https://example.com/always-503").respond(503)
-    async with make_client(timeout=5.0) as client:
+    mock_router.get("https://example.com/always-503").respond(503)
+    async with make_client(timeout=5.0, transport=mock_router.transport) as client:
         with pytest.raises(FetchError):
             await _request_with_retry(client, "GET", "https://example.com/always-503")
 
 
 async def test_request_with_retry_recovers_after_5xx(
-    respx_mock: respx.MockRouter,
+    mock_router: MockRouter,
 ) -> None:
-    route = respx_mock.get("https://example.com/flaky")
+    route = mock_router.get("https://example.com/flaky")
     route.side_effect = [
-        httpx.Response(503),
-        httpx.Response(503),
-        httpx.Response(200, text="ok"),
+        httpx2.Response(503),
+        httpx2.Response(503),
+        httpx2.Response(200, text="ok"),
     ]
-    async with make_client(timeout=5.0) as client:
+    async with make_client(timeout=5.0, transport=mock_router.transport) as client:
         resp = await _request_with_retry(client, "GET", "https://example.com/flaky")
     assert resp.status_code == 200
 
@@ -249,7 +249,7 @@ def test_parse_retry_after_returns_none_on_garbage() -> None:
 
 async def test_validation_failure_leaves_no_file_on_disk(
     tmp_path: Path,
-    mocked_devnet: respx.MockRouter,
+    mocked_devnet: MockRouter,
 ) -> None:
     """If validate raises, no half-baked YAML must persist."""
     from sdwan_mcp.fetcher import FetcherValidationError
@@ -268,16 +268,16 @@ async def test_validation_failure_leaves_no_file_on_disk(
     assert not target.exists(), "validation failure must not leave file behind"
 
 
-async def test_retry_after_header_is_honoured_on_429(respx_mock: respx.MockRouter) -> None:
+async def test_retry_after_header_is_honoured_on_429(mock_router: MockRouter) -> None:
     """A 429 with Retry-After: 0 must not consume the full exponential delay."""
     import time
 
-    route = respx_mock.get("https://example.com/throttled")
+    route = mock_router.get("https://example.com/throttled")
     route.side_effect = [
-        httpx.Response(429, headers={"Retry-After": "0"}),
-        httpx.Response(200, text="ok"),
+        httpx2.Response(429, headers={"Retry-After": "0"}),
+        httpx2.Response(200, text="ok"),
     ]
-    async with make_client(timeout=5.0) as client:
+    async with make_client(timeout=5.0, transport=mock_router.transport) as client:
         t0 = time.monotonic()
         resp = await _request_with_retry(client, "GET", "https://example.com/throttled")
         elapsed = time.monotonic() - t0

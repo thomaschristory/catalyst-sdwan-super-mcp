@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-import httpx
+import httpx2
 import yaml
 
 from .discover import (
@@ -258,8 +258,8 @@ async def fetch_version_safe(
             f"Could not fetch spec for vManage {version}: {exc}.\n"
             f"Run `sdwan-mcp fetch --version {version}` manually for a full trace."
         ) from exc
-    except httpx.HTTPError as exc:
-        # Defence in depth: if _request_with_retry ever leaks a raw httpx
+    except httpx2.HTTPError as exc:
+        # Defence in depth: if _request_with_retry ever leaks a raw httpx2
         # error (e.g. through a refactor), surface it as FetchError rather
         # than letting it bubble up untyped.
         raise FetchError(f"Network error fetching spec for vManage {version}: {exc}") from exc
