@@ -12,7 +12,7 @@ Supports two modes:
     POST /j_security_check → JSESSIONID cookie
     GET  /dataservice/client/token → xsrf token
     All requests: X-XSRF-TOKEN: {xsrfToken}
-                  (the JSESSIONID cookie is attached automatically by httpx's
+                  (the JSESSIONID cookie is attached automatically by httpx2's
                    cookie jar — we do NOT set a Cookie header ourselves; see
                    headers())
 
@@ -25,7 +25,7 @@ import contextlib
 import re
 import time
 
-import httpx
+import httpx2
 
 # Refresh JWT this many seconds before it actually expires
 REFRESH_MARGIN_SECONDS = 120
@@ -51,7 +51,7 @@ _WELCOME_REDIRECT_RE = re.compile(
 )
 
 
-def _looks_like_login_page(response: httpx.Response) -> bool:
+def _looks_like_login_page(response: httpx2.Response) -> bool:
     """True if ``response`` is the vManage HTML login page rather than API data.
 
     Cheap and conservative: JSON responses are rejected outright by content-type
@@ -116,7 +116,7 @@ class VManageAuth:
     # Public
     # ------------------------------------------------------------------
 
-    async def login(self, client: httpx.AsyncClient) -> None:
+    async def login(self, client: httpx2.AsyncClient) -> None:
         """Authenticate and populate internal token state."""
         require_credentials(self._username, self._password)
         if self._use_jwt:
@@ -124,7 +124,7 @@ class VManageAuth:
         else:
             await self._login_session(client)
 
-    async def ensure_fresh(self, client: httpx.AsyncClient) -> None:
+    async def ensure_fresh(self, client: httpx2.AsyncClient) -> None:
         """
         Proactively refresh JWT token if it's close to expiry.
         Call this before each request in JWT mode.
@@ -140,7 +140,7 @@ class VManageAuth:
         """
         Return auth headers to inject into every API request.
 
-        In session mode we rely on httpx's automatic cookie jar (the AsyncClient
+        In session mode we rely on httpx2's automatic cookie jar (the AsyncClient
         already saw the Set-Cookie from /j_security_check), so we only return
         the XSRF token here. Sending a manual Cookie header alongside the jar
         produces duplicate cookies and vManage rejects the second copy.
@@ -158,7 +158,7 @@ class VManageAuth:
             "X-XSRF-TOKEN": self._xsrf_token,
         }
 
-    def is_session_expired(self, response: httpx.Response) -> bool:
+    def is_session_expired(self, response: httpx2.Response) -> bool:
         """
         Detect session expiry so the dispatcher can re-authenticate and retry.
 
@@ -184,7 +184,7 @@ class VManageAuth:
             return True
         return response.status_code < 400 and _looks_like_login_page(response)
 
-    async def logout(self, client: httpx.AsyncClient) -> None:
+    async def logout(self, client: httpx2.AsyncClient) -> None:
         """Cleanly release the session on the server side (best effort)."""
         with contextlib.suppress(Exception):
             await client.post(f"{self._base_url}/logout", headers=self.headers())
@@ -193,7 +193,7 @@ class VManageAuth:
     # Private
     # ------------------------------------------------------------------
 
-    async def _login_jwt(self, client: httpx.AsyncClient) -> None:
+    async def _login_jwt(self, client: httpx2.AsyncClient) -> None:
         """JWT login — single call returns both tokens (20.18.1+)."""
         try:
             response = await client.post(
@@ -203,7 +203,7 @@ class VManageAuth:
                     "j_password": self._password,
                 },
             )
-        except httpx.ConnectError as e:
+        except httpx2.ConnectError as e:
             raise RuntimeError(
                 f"Cannot reach vManage at {self._base_url}.\n"
                 f"Check that the host/port are correct and vManage is reachable.\n"
@@ -237,7 +237,7 @@ class VManageAuth:
         self._token_expires_at = time.monotonic() + lifetime
         print(f"[auth] JWT login successful (token valid for ~{lifetime}s)")
 
-    async def _login_session(self, client: httpx.AsyncClient) -> None:
+    async def _login_session(self, client: httpx2.AsyncClient) -> None:
         """Session-based login — two-step: JSESSIONID then XSRF token."""
         try:
             response = await client.post(
@@ -247,7 +247,7 @@ class VManageAuth:
                     "j_password": self._password,
                 },
             )
-        except httpx.ConnectError as e:
+        except httpx2.ConnectError as e:
             raise RuntimeError(
                 f"Cannot reach vManage at {self._base_url}.\n"
                 f"Check that the host/port are correct and vManage is reachable.\n"

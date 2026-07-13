@@ -36,7 +36,7 @@ sdwan_mcp/          source package
   fetcher/          live spec ingestion from developer.cisco.com (>= 20.16)
   auth.py           JWT + session login to vManage
   transport_auth.py bearer-token middleware for SSE / streamable-HTTP
-  dispatcher.py     httpx client, retry + timeout, param routing
+  dispatcher.py     httpx2 client, retry + timeout, param routing
   pagination.py     scroll + offset auto-follow
   tools.py          dynamic MCP tool registration
   diff.py           version diff utility

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
-import respx
 
 from sdwan_mcp.auth import VManageAuth
 from sdwan_mcp.config import RetryConfig
 from sdwan_mcp.dispatcher import Dispatcher
 from sdwan_mcp.loader import SpecLoader
+from tests.mocking import MockRouter
 
 
 def _make_dispatcher(
@@ -19,6 +19,7 @@ def _make_dispatcher(
     *,
     retry: RetryConfig | None = None,
     timeout: float = 30.0,
+    transport: object = None,
 ) -> Dispatcher:
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
@@ -39,6 +40,7 @@ def _make_dispatcher(
         verify_ssl=False,
         timeout=timeout,
         retry=retry,
+        transport=transport,
     )
     d.set_index(index)
     return d
@@ -56,15 +58,15 @@ def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_recovers_after_one_503(specs_dir: Path) -> None:
+async def test_retry_recovers_after_one_503(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(max_attempts=3, statuses=(503,), backoff_base=0.0, backoff_cap=0.0)
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/count").mock(
             side_effect=[
-                httpx.Response(503),
-                httpx.Response(200, json={"count": 42}),
+                httpx2.Response(503),
+                httpx2.Response(200, json={"count": 42}),
             ]
         )
         result = await dispatcher.call("get_device_details_count", {})
@@ -74,13 +76,13 @@ async def test_retry_recovers_after_one_503(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_exhausted_returns_error(specs_dir: Path) -> None:
+async def test_retry_exhausted_returns_error(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(max_attempts=3, statuses=(503,), backoff_base=0.0, backoff_cap=0.0)
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(503)
+            return_value=httpx2.Response(503)
         )
         result = await dispatcher.call("get_device_details_count", {})
 
@@ -91,7 +93,9 @@ async def test_retry_exhausted_returns_error(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_skips_mutating_verbs_by_default(specs_dir: Path) -> None:
+async def test_retry_skips_mutating_verbs_by_default(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
     retry = RetryConfig(
         max_attempts=3,
         statuses=(503,),
@@ -99,11 +103,11 @@ async def test_retry_skips_mutating_verbs_by_default(specs_dir: Path) -> None:
         backoff_cap=0.0,
         retry_mutating=False,
     )
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
-            return_value=httpx.Response(503)
+            return_value=httpx2.Response(503)
         )
         result = await dispatcher.call(
             "post_device_actions_config", {"deviceId": "abc", "name": "edge-1"}
@@ -115,7 +119,7 @@ async def test_retry_skips_mutating_verbs_by_default(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_mutating_when_enabled(specs_dir: Path) -> None:
+async def test_retry_mutating_when_enabled(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(
         max_attempts=2,
         statuses=(503,),
@@ -123,13 +127,13 @@ async def test_retry_mutating_when_enabled(specs_dir: Path) -> None:
         backoff_cap=0.0,
         retry_mutating=True,
     )
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
             side_effect=[
-                httpx.Response(503),
-                httpx.Response(200, json={"ok": True}),
+                httpx2.Response(503),
+                httpx2.Response(200, json={"ok": True}),
             ]
         )
         result = await dispatcher.call(
@@ -141,15 +145,15 @@ async def test_retry_mutating_when_enabled(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_on_timeout(specs_dir: Path) -> None:
+async def test_retry_on_timeout(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(max_attempts=3, statuses=(), backoff_base=0.0, backoff_cap=0.0)
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/count").mock(
             side_effect=[
-                httpx.TimeoutException("timed out"),
-                httpx.Response(200, json={"count": 1}),
+                httpx2.TimeoutException("timed out"),
+                httpx2.Response(200, json={"count": 1}),
             ]
         )
         result = await dispatcher.call("get_device_details_count", {})
@@ -159,13 +163,13 @@ async def test_retry_on_timeout(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_timeout_exhausted_returns_error(specs_dir: Path) -> None:
+async def test_timeout_exhausted_returns_error(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(max_attempts=2, statuses=(), backoff_base=0.0, backoff_cap=0.0)
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            side_effect=httpx.TimeoutException("timed out")
+            side_effect=httpx2.TimeoutException("timed out")
         )
         result = await dispatcher.call("get_device_details_count", {})
 
@@ -178,13 +182,13 @@ async def test_timeout_exhausted_returns_error(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_retry_on_non_retryable_status(specs_dir: Path) -> None:
+async def test_no_retry_on_non_retryable_status(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(max_attempts=3, statuses=(503,), backoff_base=0.0, backoff_cap=0.0)
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(404, json={"error": "not found"})
+            return_value=httpx2.Response(404, json={"error": "not found"})
         )
         result = await dispatcher.call("get_device_details_count", {})
 
@@ -194,13 +198,13 @@ async def test_no_retry_on_non_retryable_status(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_disabled_retry_max_attempts_one(specs_dir: Path) -> None:
+async def test_disabled_retry_max_attempts_one(specs_dir: Path, mock_router: MockRouter) -> None:
     retry = RetryConfig(max_attempts=1, statuses=(503,))
-    dispatcher = _make_dispatcher(specs_dir, retry=retry)
+    dispatcher = _make_dispatcher(specs_dir, retry=retry, transport=mock_router.transport)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(503)
+            return_value=httpx2.Response(503)
         )
         result = await dispatcher.call("get_device_details_count", {})
 

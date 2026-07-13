@@ -11,15 +11,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
-import respx
 
 from sdwan_mcp.auth import VManageAuth
 from sdwan_mcp.config import DebugConfig, load_config
 from sdwan_mcp.dispatcher import Dispatcher, _cap_body, _redact_data, _redact_headers
 from sdwan_mcp.loader import SpecLoader
 from sdwan_mcp.server import parse_args, resolve_debug_config
+from tests.mocking import MockRouter
 
 REST0001_BODY = {
     "error": {
@@ -30,7 +30,7 @@ REST0001_BODY = {
 }
 
 
-def _make_dispatcher(specs_dir: Path, debug: DebugConfig) -> Dispatcher:
+def _make_dispatcher(specs_dir: Path, debug: DebugConfig, transport: object = None) -> Dispatcher:
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
         host="vm.test",
@@ -48,6 +48,7 @@ def _make_dispatcher(specs_dir: Path, debug: DebugConfig) -> Dispatcher:
         auth=auth,
         verify_ssl=False,
         debug=debug,
+        transport=transport,
     )
     d.set_index(index)
     return d
@@ -142,11 +143,11 @@ def test_redact_headers_passthrough_when_off() -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_debug_key_when_disabled(specs_dir: Path) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=False))
-    with respx.mock(assert_all_called=True) as router:
+async def test_no_debug_key_when_disabled(specs_dir: Path, mock_router: MockRouter) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=False), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await d.call("get_device_details_devices", {})
     assert isinstance(result, dict)
@@ -155,11 +156,13 @@ async def test_no_debug_key_when_disabled(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_debug_captures_on_error(specs_dir: Path, capsys: pytest.CaptureFixture) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
-    with respx.mock(assert_all_called=True) as router:
+async def test_debug_captures_on_error(
+    specs_dir: Path, capsys: pytest.CaptureFixture, mock_router: MockRouter
+) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await d.call("get_device_details_devices", {}, tool_name="monitoring")
 
@@ -179,11 +182,13 @@ async def test_debug_captures_on_error(specs_dir: Path, capsys: pytest.CaptureFi
 
 
 @pytest.mark.asyncio
-async def test_debug_redacts_auth_headers_by_default(specs_dir: Path) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
-    with respx.mock(assert_all_called=True) as router:
+async def test_debug_redacts_auth_headers_by_default(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await d.call("get_device_details_devices", {})
 
@@ -196,11 +201,13 @@ async def test_debug_redacts_auth_headers_by_default(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_debug_no_redact_keeps_token(specs_dir: Path) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, redact=False))
-    with respx.mock(assert_all_called=True) as router:
+async def test_debug_no_redact_keeps_token(specs_dir: Path, mock_router: MockRouter) -> None:
+    d = _make_dispatcher(
+        specs_dir, DebugConfig(enabled=True, redact=False), transport=mock_router.transport
+    )
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await d.call("get_device_details_devices", {})
 
@@ -209,14 +216,14 @@ async def test_debug_no_redact_keeps_token(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_debug_captures_request_body_shape(specs_dir: Path) -> None:
+async def test_debug_captures_request_body_shape(specs_dir: Path, mock_router: MockRouter) -> None:
     """A POST forwards params straight to the body — debug must show that the
     'query' payload sits at the top level (the #72 request-shape gotcha)."""
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
     query = {"query": {"condition": "AND", "rules": []}}
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await d.call("post_device_actions_config", {"deviceId": "abc", **query})
 
@@ -227,22 +234,30 @@ async def test_debug_captures_request_body_shape(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_capture_errors_skips_successful_call(specs_dir: Path) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="errors"))
-    with respx.mock(assert_all_called=True) as router:
+async def test_capture_errors_skips_successful_call(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
+    d = _make_dispatcher(
+        specs_dir, DebugConfig(enabled=True, capture="errors"), transport=mock_router.transport
+    )
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(200, json={"count": 3})
+            return_value=httpx2.Response(200, json={"count": 3})
         )
         result = await d.call("get_device_details_count", {})
     assert result == {"count": 3}  # untouched, no debug key
 
 
 @pytest.mark.asyncio
-async def test_capture_all_attaches_on_success_dict(specs_dir: Path) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="all"))
-    with respx.mock(assert_all_called=True) as router:
+async def test_capture_all_attaches_on_success_dict(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
+    d = _make_dispatcher(
+        specs_dir, DebugConfig(enabled=True, capture="all"), transport=mock_router.transport
+    )
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(200, json={"count": 3})
+            return_value=httpx2.Response(200, json={"count": 3})
         )
         result = await d.call("get_device_details_count", {})
     assert isinstance(result, dict)
@@ -252,14 +267,16 @@ async def test_capture_all_attaches_on_success_dict(specs_dir: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_capture_all_leaves_list_success_unwrapped(
-    specs_dir: Path, capsys: pytest.CaptureFixture
+    specs_dir: Path, capsys: pytest.CaptureFixture, mock_router: MockRouter
 ) -> None:
     """A list-shaped success can't carry a debug key without reshaping; it is
     returned verbatim and the record goes to stderr only."""
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="all"))
-    with respx.mock(assert_all_called=True) as router:
+    d = _make_dispatcher(
+        specs_dir, DebugConfig(enabled=True, capture="all"), transport=mock_router.transport
+    )
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(200, json=[1, 2, 3])
+            return_value=httpx2.Response(200, json=[1, 2, 3])
         )
         result = await d.call("get_device_details_count", {})
     assert result == [1, 2, 3]
@@ -346,13 +363,17 @@ def test_redact_data_passthrough_when_off() -> None:
 
 
 @pytest.mark.asyncio
-async def test_debug_scrubs_token_returning_response_body(specs_dir: Path) -> None:
+async def test_debug_scrubs_token_returning_response_body(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
     """GET /client/token-style endpoints return a live token in the BODY;
     redaction must mask it, not just the auth headers."""
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="all"))
-    with respx.mock(assert_all_called=True) as router:
+    d = _make_dispatcher(
+        specs_dir, DebugConfig(enabled=True, capture="all"), transport=mock_router.transport
+    )
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            return_value=httpx.Response(200, json={"token": "LIVE-XSRF-TOKEN"})
+            return_value=httpx2.Response(200, json={"token": "LIVE-XSRF-TOKEN"})
         )
         result = await d.call("get_device_details_count", {})
 
@@ -365,7 +386,9 @@ async def test_debug_scrubs_token_returning_response_body(specs_dir: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_debug_redaction_is_scoped_to_capture_not_data_plane(specs_dir: Path) -> None:
+async def test_debug_redaction_is_scoped_to_capture_not_data_plane(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
     """Redaction scope is the *debug capture*, not the primary result body.
 
     The server proxies vManage: the raw response body is the data the caller
@@ -373,10 +396,10 @@ async def test_debug_redaction_is_scoped_to_capture_not_data_plane(specs_dir: Pa
     shareable `debug` copy of that exchange is scrubbed. This pins that
     intentional boundary so a future change doesn't silently start mangling
     the data plane (or stop scrubbing the capture)."""
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
-    with respx.mock(assert_all_called=True) as router:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json={"token": "LIVE-TOKEN", "error": {"code": "X"}})
+            return_value=httpx2.Response(500, json={"token": "LIVE-TOKEN", "error": {"code": "X"}})
         )
         result = await d.call("get_device_details_devices", {})
 
@@ -386,12 +409,12 @@ async def test_debug_redaction_is_scoped_to_capture_not_data_plane(specs_dir: Pa
 
 
 @pytest.mark.asyncio
-async def test_debug_caps_oversized_body(specs_dir: Path) -> None:
+async def test_debug_caps_oversized_body(specs_dir: Path, mock_router: MockRouter) -> None:
     big = {"blob": "x" * 50_000}
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
-    with respx.mock(assert_all_called=True) as router:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=big)
+            return_value=httpx2.Response(500, json=big)
         )
         result = await d.call("get_device_details_devices", {})
 
@@ -412,12 +435,12 @@ def test_cap_body_passes_small_payload() -> None:
 
 @pytest.mark.asyncio
 async def test_debug_redacts_response_set_cookie(
-    specs_dir: Path, capsys: pytest.CaptureFixture
+    specs_dir: Path, capsys: pytest.CaptureFixture, mock_router: MockRouter
 ) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
-    with respx.mock(assert_all_called=True) as router:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(
+            return_value=httpx2.Response(
                 500, json=REST0001_BODY, headers={"Set-Cookie": "JSESSIONID=leakme; Path=/"}
             )
         )
@@ -433,16 +456,18 @@ async def test_debug_redacts_response_set_cookie(
 
 
 # ---------------------------------------------------------------------------
-# transport-level failure (httpx.RequestError) capture path
+# transport-level failure (httpx2.RequestError) capture path
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_debug_captures_request_error(specs_dir: Path, capsys: pytest.CaptureFixture) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True))
-    with respx.mock(assert_all_called=True) as router:
+async def test_debug_captures_request_error(
+    specs_dir: Path, capsys: pytest.CaptureFixture, mock_router: MockRouter
+) -> None:
+    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True), transport=mock_router.transport)
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices/count").mock(
-            side_effect=httpx.ConnectError("connection refused")
+            side_effect=httpx2.ConnectError("connection refused")
         )
         result = await d.call("get_device_details_count", {})
 
@@ -461,11 +486,15 @@ async def test_debug_captures_request_error(specs_dir: Path, capsys: pytest.Capt
 
 
 @pytest.mark.asyncio
-async def test_capture_all_still_captures_error_once(specs_dir: Path) -> None:
-    d = _make_dispatcher(specs_dir, DebugConfig(enabled=True, capture="all"))
-    with respx.mock(assert_all_called=True) as router:
+async def test_capture_all_still_captures_error_once(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
+    d = _make_dispatcher(
+        specs_dir, DebugConfig(enabled=True, capture="all"), transport=mock_router.transport
+    )
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await d.call("get_device_details_devices", {})
 

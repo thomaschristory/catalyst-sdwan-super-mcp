@@ -7,7 +7,7 @@ vmanage:
   username: "${VMANAGE_USERNAME}"
   password: "${VMANAGE_PASSWORD}"
   use_jwt: true            # 20.15+ supports the modern JWT endpoint; set false to force session
-  timeout: 30.0            # per-request httpx timeout (seconds)
+  timeout: 30.0            # per-request httpx2 timeout (seconds)
   retries:
     max_attempts: 3        # total attempts incl. first try; 1 disables retries
     statuses: [502, 503, 504]

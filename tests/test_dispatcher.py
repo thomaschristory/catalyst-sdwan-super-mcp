@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
-import respx
 
 from sdwan_mcp.auth import VManageAuth
 from sdwan_mcp.dispatcher import Dispatcher, _stats_db_hint
 from sdwan_mcp.loader import OperationSpec, SpecLoader, ToolGroup
+from tests.mocking import MockRouter
 
 
 @pytest.fixture
-def dispatcher(specs_dir: Path) -> Dispatcher:
+def dispatcher(specs_dir: Path, mock_router: MockRouter) -> Dispatcher:
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
         host="vm.test",
@@ -33,16 +33,19 @@ def dispatcher(specs_dir: Path) -> Dispatcher:
         base_url="https://vm.test:8443/dataservice",
         auth=auth,
         verify_ssl=False,
+        transport=mock_router.transport,
     )
     d.set_index(index)
     return d
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_substitutes_path_params(dispatcher: Dispatcher) -> None:
-    with respx.mock(assert_all_called=True) as router:
+async def test_dispatcher_substitutes_path_params(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
-            return_value=httpx.Response(200, json={"deviceId": "10.0.0.1"})
+            return_value=httpx2.Response(200, json={"deviceId": "10.0.0.1"})
         )
         result = await dispatcher.call("get_device_details_info", {"deviceId": "10.0.0.1"})
 
@@ -51,12 +54,14 @@ async def test_dispatcher_substitutes_path_params(dispatcher: Dispatcher) -> Non
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_encodes_path_params(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_encodes_path_params(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """Path-param values are percent-encoded so separators can't reshape the
     request path (#55 L3). A traversal payload stays a single, escaped segment."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices/a%2F..%2Fadmin/info").mock(
-            return_value=httpx.Response(200, json={"ok": True})
+            return_value=httpx2.Response(200, json={"ok": True})
         )
         await dispatcher.call("get_device_details_info", {"deviceId": "a/../admin"})
 
@@ -69,21 +74,25 @@ async def test_dispatcher_encodes_path_params(dispatcher: Dispatcher) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_leaves_ordinary_ids_untouched(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_leaves_ordinary_ids_untouched(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """Unreserved chars (e.g. a dotted device id) pass through unencoded."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
-            return_value=httpx.Response(200, json={"ok": True})
+            return_value=httpx2.Response(200, json={"ok": True})
         )
         result = await dispatcher.call("get_device_details_info", {"deviceId": "10.0.0.1"})
     assert result == {"ok": True}
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_routes_query_params(dispatcher: Dispatcher) -> None:
-    with respx.mock(assert_all_called=True) as router:
+async def test_dispatcher_routes_query_params(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(200, json={"data": []})
+            return_value=httpx2.Response(200, json={"data": []})
         )
         await dispatcher.call("get_device_details_devices", {"site-id": "500"})
 
@@ -107,10 +116,10 @@ async def test_dispatcher_unknown_action_returns_error(dispatcher: Dispatcher) -
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_post_routes_body(dispatcher: Dispatcher) -> None:
-    with respx.mock(assert_all_called=True) as router:
+async def test_dispatcher_post_routes_body(dispatcher: Dispatcher, mock_router: MockRouter) -> None:
+    with mock_router.scope() as router:
         route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
-            return_value=httpx.Response(200, json={"ok": True})
+            return_value=httpx2.Response(200, json={"ok": True})
         )
         await dispatcher.call(
             "post_device_actions_config",
@@ -193,11 +202,13 @@ def test_stats_hint_silent_on_non_500() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_annotates_stats_db_500(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_annotates_stats_db_500(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """End-to-end: a REST0001 500 surfaces the hint alongside the raw error."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json=REST0001_BODY)
+            return_value=httpx2.Response(500, json=REST0001_BODY)
         )
         result = await dispatcher.call("get_device_details_devices", {})
 
@@ -213,7 +224,7 @@ async def test_dispatcher_annotates_stats_db_500(dispatcher: Dispatcher) -> None
 # ---------------------------------------------------------------------------
 
 
-def _colliding_dispatcher() -> Dispatcher:
+def _colliding_dispatcher(transport: object = None) -> Dispatcher:
     """Two tools both expose action `get_bgp`, pointing at different paths."""
     op_a = OperationSpec(
         operation_id="a", action_name="get_bgp", summary="", method="get", path="/a/bgp", tag="t"
@@ -233,22 +244,27 @@ def _colliding_dispatcher() -> Dispatcher:
     auth._jwt_token = "fake-jwt"
     auth._xsrf_token = "fake-xsrf"
     auth._token_expires_at = 1e18
-    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d = Dispatcher(
+        base_url="https://vm.test:8443/dataservice",
+        auth=auth,
+        verify_ssl=False,
+        transport=transport,
+    )
     d.set_index(index)
     return d
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_routes_colliding_action_to_calling_tool() -> None:
+async def test_dispatcher_routes_colliding_action_to_calling_tool(mock_router: MockRouter) -> None:
     """`get_bgp` on tool_b must hit /b/bgp, not tool_a's /a/bgp. Regression for
     the #65 misroute where the global index kept only the first occurrence."""
-    d = _colliding_dispatcher()
-    with respx.mock(assert_all_called=True) as router:
+    d = _colliding_dispatcher(mock_router.transport)
+    with mock_router.scope() as router:
         route_a = router.get("https://vm.test:8443/dataservice/a/bgp").mock(
-            return_value=httpx.Response(200, json={"tool": "a"})
+            return_value=httpx2.Response(200, json={"tool": "a"})
         )
         route_b = router.get("https://vm.test:8443/dataservice/b/bgp").mock(
-            return_value=httpx.Response(200, json={"tool": "b"})
+            return_value=httpx2.Response(200, json={"tool": "b"})
         )
         # Both directions: each tool resolves its OWN op, neither clobbers the other.
         result_b = await d.call("get_bgp", {}, tool_name="tool_b")
@@ -260,10 +276,10 @@ async def test_dispatcher_routes_colliding_action_to_calling_tool() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_unknown_tool_name_fails_safe() -> None:
+async def test_dispatcher_unknown_tool_name_fails_safe(mock_router: MockRouter) -> None:
     """A provided-but-unknown tool_name returns the not-found error rather than
     silently degrading to the lossy flat index (#65 review hardening)."""
-    d = _colliding_dispatcher()
+    d = _colliding_dispatcher(mock_router.transport)
     result = await d.call("get_bgp", {}, tool_name="no_such_tool")
     assert isinstance(result, dict)
     assert result.get("error") is True
@@ -271,11 +287,13 @@ async def test_dispatcher_unknown_tool_name_fails_safe() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_no_hint_on_ordinary_500(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_no_hint_on_ordinary_500(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """A non-stats 500 stays clean — no spurious hint key."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/devices").mock(
-            return_value=httpx.Response(500, json={"error": {"code": "OTHER"}})
+            return_value=httpx2.Response(500, json={"error": {"code": "OTHER"}})
         )
         result = await dispatcher.call("get_device_details_devices", {})
 
@@ -290,13 +308,15 @@ async def test_dispatcher_no_hint_on_ordinary_500(dispatcher: Dispatcher) -> Non
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_unwraps_lone_body_wrapper(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_unwraps_lone_body_wrapper(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """A caller that nested the whole payload under a lone `body` key (the shape
     the old `body: object` schema implied) must not double-wrap: the dispatcher
     unwraps it so vManage sees the fields at the top level (#78)."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
-            return_value=httpx.Response(200, json={"ok": True})
+            return_value=httpx2.Response(200, json={"ok": True})
         )
         await dispatcher.call(
             "post_device_actions_config",
@@ -311,12 +331,14 @@ async def test_dispatcher_unwraps_lone_body_wrapper(dispatcher: Dispatcher) -> N
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_keeps_body_field_alongside_others(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_keeps_body_field_alongside_others(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """Only a *lone* `body` key is unwrapped. A genuine field named `body` next to
     other fields is forwarded verbatim — we don't guess it's a wrapper."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
-            return_value=httpx.Response(200, json={"ok": True})
+            return_value=httpx2.Response(200, json={"ok": True})
         )
         await dispatcher.call(
             "post_device_actions_config",
@@ -345,12 +367,14 @@ def test_stats_hint_silent_on_other_400() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_unwraps_lone_body_wrapper_non_dict(dispatcher: Dispatcher) -> None:
+async def test_dispatcher_unwraps_lone_body_wrapper_non_dict(
+    dispatcher: Dispatcher, mock_router: MockRouter
+) -> None:
     """The lone-`body` unwrap covers non-dict payloads too (e.g. an array body
     nested under `body`) — otherwise the double-wrap persists (#78 review)."""
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.post("https://vm.test:8443/dataservice/devices/abc/config").mock(
-            return_value=httpx.Response(200, json={"ok": True})
+            return_value=httpx2.Response(200, json={"ok": True})
         )
         await dispatcher.call(
             "post_device_actions_config",
@@ -386,7 +410,9 @@ _LOGIN_PAGE_HTML = (
 
 
 @pytest.mark.asyncio
-async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
+async def test_session_mode_reauths_on_login_page_200(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
     """Legacy session mode (#93): a stale session answers an API call with a
     200 login page (not a 302/401). The dispatcher must detect that, re-login,
     and transparently retry — no restart. Proven end-to-end through call()."""
@@ -403,23 +429,28 @@ async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
     auth._session_id = "stale"
     auth._xsrf_token = "stale-xsrf"
 
-    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d = Dispatcher(
+        base_url="https://vm.test:8443/dataservice",
+        auth=auth,
+        verify_ssl=False,
+        transport=mock_router.transport,
+    )
     d.set_index(index)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         api = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
             side_effect=[
-                httpx.Response(200, html=_LOGIN_PAGE_HTML),  # stale → login page
-                httpx.Response(200, json={"deviceId": "10.0.0.1"}),  # after re-login
+                httpx2.Response(200, html=_LOGIN_PAGE_HTML),  # stale → login page
+                httpx2.Response(200, json={"deviceId": "10.0.0.1"}),  # after re-login
             ]
         )
         login = router.post("https://vm.test:8443/j_security_check").mock(
-            return_value=httpx.Response(
+            return_value=httpx2.Response(
                 200, text="", headers={"Set-Cookie": "JSESSIONID=fresh; Path=/"}
             )
         )
         token = router.get("https://vm.test:8443/dataservice/client/token").mock(
-            return_value=httpx.Response(200, text="fresh-xsrf")
+            return_value=httpx2.Response(200, text="fresh-xsrf")
         )
         result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
 
@@ -430,7 +461,9 @@ async def test_session_mode_reauths_on_login_page_200(specs_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_mode_persistent_login_page_returns_error(specs_dir: Path) -> None:
+async def test_session_mode_persistent_login_page_returns_error(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
     """If re-login succeeds but the retry is STILL a login page (e.g. a
     concurrent-session limit keeps evicting us), the dispatcher must return a
     real error — never leak the internal `_session_expired` sentinel to the
@@ -447,20 +480,25 @@ async def test_session_mode_persistent_login_page_returns_error(specs_dir: Path)
     auth._session_id = "stale"
     auth._xsrf_token = "stale-xsrf"
 
-    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d = Dispatcher(
+        base_url="https://vm.test:8443/dataservice",
+        auth=auth,
+        verify_ssl=False,
+        transport=mock_router.transport,
+    )
     d.set_index(index)
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         api = router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
-            return_value=httpx.Response(200, html=_LOGIN_PAGE_HTML)  # always a login page
+            return_value=httpx2.Response(200, html=_LOGIN_PAGE_HTML)  # always a login page
         )
         router.post("https://vm.test:8443/j_security_check").mock(
-            return_value=httpx.Response(
+            return_value=httpx2.Response(
                 200, text="", headers={"Set-Cookie": "JSESSIONID=fresh; Path=/"}
             )
         )
         router.get("https://vm.test:8443/dataservice/client/token").mock(
-            return_value=httpx.Response(200, text="fresh-xsrf")
+            return_value=httpx2.Response(200, text="fresh-xsrf")
         )
         result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
 
@@ -472,7 +510,9 @@ async def test_session_mode_persistent_login_page_returns_error(specs_dir: Path)
 
 
 @pytest.mark.asyncio
-async def test_session_mode_no_reauth_on_normal_200(specs_dir: Path) -> None:
+async def test_session_mode_no_reauth_on_normal_200(
+    specs_dir: Path, mock_router: MockRouter
+) -> None:
     """Guard: a normal JSON 200 in session mode must NOT trigger a re-login."""
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
@@ -486,15 +526,20 @@ async def test_session_mode_no_reauth_on_normal_200(specs_dir: Path) -> None:
     auth._session_id = "live"
     auth._xsrf_token = "live-xsrf"
 
-    d = Dispatcher(base_url="https://vm.test:8443/dataservice", auth=auth, verify_ssl=False)
+    d = Dispatcher(
+        base_url="https://vm.test:8443/dataservice",
+        auth=auth,
+        verify_ssl=False,
+        transport=mock_router.transport,
+    )
     d.set_index(index)
 
-    with respx.mock(assert_all_called=False) as router:
+    with mock_router.scope(assert_all_called=False) as router:
         router.get("https://vm.test:8443/dataservice/devices/10.0.0.1/info").mock(
-            return_value=httpx.Response(200, json={"deviceId": "10.0.0.1"})
+            return_value=httpx2.Response(200, json={"deviceId": "10.0.0.1"})
         )
         login = router.post("https://vm.test:8443/j_security_check").mock(
-            return_value=httpx.Response(200)
+            return_value=httpx2.Response(200)
         )
         result = await d.call("get_device_details_info", {"deviceId": "10.0.0.1"})
 

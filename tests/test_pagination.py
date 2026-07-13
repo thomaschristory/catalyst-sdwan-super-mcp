@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
-import respx
 import yaml
 
 from sdwan_mcp.auth import VManageAuth
@@ -18,6 +17,7 @@ from sdwan_mcp.pagination import (
     _offset_size_param_name,
     stitch,
 )
+from tests.mocking import MockRouter
 
 
 def test_first_list_key_returns_data_when_present():
@@ -369,7 +369,7 @@ def _paginated_spec_dir(tmp_path):
     return tmp_path / "specs"
 
 
-def _make_dispatcher(specs_dir, *, pagination):
+def _make_dispatcher(specs_dir, *, pagination, transport=None):
     index = SpecLoader(str(specs_dir), "20.99", read_write=True).load()
     auth = VManageAuth(
         host="vm.test",
@@ -388,21 +388,26 @@ def _make_dispatcher(specs_dir, *, pagination):
         auth=auth,
         verify_ssl=False,
         pagination=pagination,
+        transport=transport,
     )
     d.set_index(index)
     return d
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_scroll_full_drain(tmp_path):
-    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+async def test_dispatcher_scroll_full_drain(tmp_path, mock_router: MockRouter):
+    d = _make_dispatcher(
+        _paginated_spec_dir(tmp_path),
+        pagination=PaginationConfig(),
+        transport=mock_router.transport,
+    )
     action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/alarms")
         route.mock(
             side_effect=[
-                httpx.Response(
+                httpx2.Response(
                     200,
                     json={
                         "data": [{"i": 1}],
@@ -414,7 +419,7 @@ async def test_dispatcher_scroll_full_drain(tmp_path):
                         },
                     },
                 ),
-                httpx.Response(
+                httpx2.Response(
                     200,
                     json={
                         "data": [{"i": 2}],
@@ -438,13 +443,17 @@ async def test_dispatcher_scroll_full_drain(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_offset_truncated_via_override(tmp_path):
-    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig(max_pages=5))
+async def test_dispatcher_offset_truncated_via_override(tmp_path, mock_router: MockRouter):
+    d = _make_dispatcher(
+        _paginated_spec_dir(tmp_path),
+        pagination=PaginationConfig(max_pages=5),
+        transport=mock_router.transport,
+    )
     action = next(a for a in d._index.by_action_name if "device" in a.lower())
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/devices")
-        route.mock(return_value=httpx.Response(200, json={"data": list(range(10))}))
+        route.mock(return_value=httpx2.Response(200, json={"data": list(range(10))}))
 
         result = await d.call(action, {"pageSize": 10, "_max_pages": 2})
 
@@ -459,13 +468,17 @@ async def test_dispatcher_offset_truncated_via_override(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_opt_out_returns_raw_first_page(tmp_path):
-    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+async def test_dispatcher_opt_out_returns_raw_first_page(tmp_path, mock_router: MockRouter):
+    d = _make_dispatcher(
+        _paginated_spec_dir(tmp_path),
+        pagination=PaginationConfig(),
+        transport=mock_router.transport,
+    )
     action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/alarms").mock(
-            return_value=httpx.Response(
+            return_value=httpx2.Response(
                 200,
                 json={
                     "data": [{"i": 1}],
@@ -481,13 +494,17 @@ async def test_dispatcher_opt_out_returns_raw_first_page(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_disabled_globally(tmp_path):
-    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig(enabled=False))
+async def test_dispatcher_disabled_globally(tmp_path, mock_router: MockRouter):
+    d = _make_dispatcher(
+        _paginated_spec_dir(tmp_path),
+        pagination=PaginationConfig(enabled=False),
+        transport=mock_router.transport,
+    )
     action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/alarms").mock(
-            return_value=httpx.Response(
+            return_value=httpx2.Response(
                 200,
                 json={
                     "data": [{"i": 1}],
@@ -501,13 +518,17 @@ async def test_dispatcher_disabled_globally(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_non_paginated_op_unchanged(tmp_path):
-    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+async def test_dispatcher_non_paginated_op_unchanged(tmp_path, mock_router: MockRouter):
+    d = _make_dispatcher(
+        _paginated_spec_dir(tmp_path),
+        pagination=PaginationConfig(),
+        transport=mock_router.transport,
+    )
     action = next(a for a in d._index.by_action_name if "single" in a.lower())
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         router.get("https://vm.test:8443/dataservice/single").mock(
-            return_value=httpx.Response(200, json={"hello": "world"})
+            return_value=httpx2.Response(200, json={"hello": "world"})
         )
         result = await d.call(action, {})
 
@@ -515,14 +536,18 @@ async def test_dispatcher_non_paginated_op_unchanged(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_user_supplied_cursor_resumes(tmp_path):
-    d = _make_dispatcher(_paginated_spec_dir(tmp_path), pagination=PaginationConfig())
+async def test_dispatcher_user_supplied_cursor_resumes(tmp_path, mock_router: MockRouter):
+    d = _make_dispatcher(
+        _paginated_spec_dir(tmp_path),
+        pagination=PaginationConfig(),
+        transport=mock_router.transport,
+    )
     action = next(a for a in d._index.by_action_name if "alarm" in a.lower())
 
-    with respx.mock(assert_all_called=True) as router:
+    with mock_router.scope() as router:
         route = router.get("https://vm.test:8443/dataservice/alarms")
         route.mock(
-            return_value=httpx.Response(
+            return_value=httpx2.Response(
                 200,
                 json={
                     "data": [{"i": 99}],

@@ -1,5 +1,5 @@
 """
-dispatcher.py — httpx async client for vManage API calls.
+dispatcher.py — httpx2 async client for vManage API calls.
 
 Handles:
   - Auth via VManageAuth (JWT or session-based)
@@ -20,7 +20,7 @@ import time
 from typing import Any, TypeAlias
 from urllib.parse import quote
 
-import httpx
+import httpx2
 
 from .auth import VManageAuth
 from .config import DebugConfig, PaginationConfig, RetryConfig
@@ -78,6 +78,7 @@ class Dispatcher:
         pagination: PaginationConfig | None = None,
         retry: RetryConfig | None = None,
         debug: DebugConfig | None = None,
+        transport: httpx2.AsyncBaseTransport | None = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._auth = auth
@@ -86,13 +87,15 @@ class Dispatcher:
         self._retry_cfg = retry or RetryConfig()
         self._debug_cfg = debug or DebugConfig()
 
-        self._client = httpx.AsyncClient(
+        self._client = httpx2.AsyncClient(
             base_url=self._base_url,
             verify=verify_ssl,
             timeout=timeout,
             # Don't follow redirects automatically — we detect 302 to welcome.html
             # as a session expiry signal
             follow_redirects=False,
+            # None → httpx2 picks its default transport. Tests inject a MockTransport.
+            transport=transport,
         )
 
     # ------------------------------------------------------------------
@@ -305,7 +308,7 @@ class Dispatcher:
                 headers=headers,
                 retryable=self._is_retryable(op.method),
             )
-        except httpx.RequestError as e:
+        except httpx2.RequestError as e:
             result: dict[str, Any] = {"error": True, "message": f"Request failed: {e}"}
             if debug_on:
                 dbg = self._build_debug(
@@ -397,10 +400,10 @@ class Dispatcher:
         json: dict[str, Any] | None,
         headers: dict[str, str],
         retryable: bool,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         cfg = self._retry_cfg
         attempts = max(1, cfg.max_attempts) if retryable else 1
-        last_response: httpx.Response | None = None
+        last_response: httpx2.Response | None = None
 
         for attempt in range(attempts):
             try:
@@ -411,7 +414,7 @@ class Dispatcher:
                     json=json,
                     headers=headers,
                 )
-            except httpx.RequestError:
+            except httpx2.RequestError:
                 if attempt + 1 >= attempts:
                     raise
                 await self._sleep_backoff(attempt)
@@ -451,7 +454,7 @@ class Dispatcher:
         body: dict[str, Any] | None,
         request_headers: dict[str, str],
         *,
-        response: httpx.Response | None,
+        response: httpx2.Response | None,
         elapsed_ms: float,
         request_error: str | None = None,
     ) -> dict[str, Any]:
@@ -635,7 +638,7 @@ def _stats_db_hint(op: OperationSpec, status_code: int, body: Any) -> str | None
     )
 
 
-def _safe_json(response: httpx.Response) -> DispatchResult:
+def _safe_json(response: httpx2.Response) -> DispatchResult:
     """Try JSON parse; fall back to raw text."""
     try:
         data = response.json()

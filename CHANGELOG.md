@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **HTTP client swapped from `httpx` to [`httpx2`](https://github.com/pydantic/httpx2)
+  (#99).** `httpx` has had no stable release since 0.28.1 (Dec 2024) — only
+  `1.0.dev*` prereleases. `httpx2` is Pydantic's continuation of the same project
+  under active stewardship, keeping security updates flowing for a library that
+  sits in our critical path (vManage auth, dispatcher, spec fetcher). The public
+  API is a rename, not a redesign, so the source change is mechanical.
+
+  **This does not remove `httpx` from your install.** `mcp` (under `fastmcp`)
+  still depends on it, so both `httpx`/`httpcore` and `httpx2`/`httpcore2` are
+  present after upgrading. What changed is that *our* requests now go through the
+  maintained library.
+
+  Verified live against the DevNet sandbox in both auth modes: session-mode login
+  (which relies on the cookie jar auto-managing `JSESSIONID`) works unchanged on
+  httpx2's vendored `httpcore2`. The JWT-mode failure on that sandbox predates this
+  change — the sandbox answers `/j_security_check` with an empty 200 body under both
+  libraries, byte for byte, and has always needed session mode.
+
+- **`respx` dropped as a test dependency in favour of `tests/mocking.py` (#99).**
+  respx patches httpx's transport internals and pins `httpx>=0.25`, so it cannot
+  mock httpx2 traffic (upstream respx #316/#317 are open; no `respx2` exists). The
+  replacement is a small respx-shaped router over `httpx2.MockTransport` covering
+  exactly the surface the suite used, so all 243 tests carried their assertions
+  over unchanged.
+
+  One user-visible consequence: respx patched globally, but a `MockTransport` must
+  be **injected**, so `Dispatcher(...)` and `fetcher.make_client(...)` now accept an
+  optional `transport` argument. It defaults to `None` (httpx2 picks its default
+  transport), so production behaviour is unchanged.
+
 - **Docs now build with [Zensical](https://zensical.org/) instead of MkDocs +
   Material for MkDocs (#97).** Zensical is the successor to both, from the same
   team. It reads the existing `mkdocs.yml` natively, so the nav, palette,

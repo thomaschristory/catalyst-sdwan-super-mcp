@@ -17,9 +17,10 @@ Docs: <https://thomaschristory.github.io/catalyst-sdwan-super-mcp/>.
 - **Python** ≥ 3.11 (CI: 3.11, 3.12, 3.13 on Linux + macOS)
 - **Packaging:** `pyproject.toml` (hatchling), managed with `uv`
 - **MCP framework:** `fastmcp`
-- **HTTP client:** `httpx` (async)
+- **HTTP client:** `httpx2` (async) — Pydantic's maintained continuation of `httpx` (#99)
 - **Config parsing:** `pyyaml` + `python-dotenv`
-- **Tests:** `pytest`, `respx` (HTTP mocks), `pytest-asyncio`
+- **Tests:** `pytest`, `pytest-asyncio`, and `tests/mocking.py` (a respx-shaped router
+  over `httpx2.MockTransport` — respx cannot mock httpx2)
 - **Lint / format:** `ruff`
 - **Docs:** `zensical` (reads `mkdocs.yml` natively), deployed to GitHub Pages
 
@@ -152,15 +153,15 @@ POST /j_security_check  { j_username, j_password }
 → Set-Cookie: JSESSIONID=...  (success: empty body)
                               (failure: full login-form HTML in body)
 
-GET /dataservice/client/token  (cookie auto-attached by httpx jar)
+GET /dataservice/client/token  (cookie auto-attached by httpx2 jar)
 → plain text xsrf token
 
 Subsequent requests:
   X-XSRF-TOKEN: {xsrfToken}
-  (cookie auto-attached by httpx client)
+  (cookie auto-attached by httpx2 client)
 ```
 
-**Important:** `httpx.AsyncClient` keeps a cookie jar. We let it manage `JSESSIONID`
+**Important:** `httpx2.AsyncClient` keeps a cookie jar. We let it manage `JSESSIONID`
 automatically and only set `X-XSRF-TOKEN` ourselves — passing a manual `Cookie` header
 in addition produces duplicate cookies and vManage rejects the second copy. This bit
 me during the first sandbox test.
@@ -180,7 +181,7 @@ catalyst-sdwan-super-mcp/
     config.py                 sdwan-mcp.yaml loader + ${ENV} interpolation
     auth.py                   JWT + session login, refresh, logout
     loader.py                 spec loading, adaptive splitting (section/sub-tag/path), RO/RW filter, action-name derivation, indexing
-    dispatcher.py             httpx client, param routing, retry on session expiry + transient HTTP failures
+    dispatcher.py             httpx2 client, param routing, retry on session expiry + transient HTTP failures
     tools.py                  dynamic MCP tool registration
     diff.py                   version diff utility
   tests/                      pytest suite (test_loader, test_dispatcher, test_diff, test_config)
@@ -324,7 +325,7 @@ server.py (async pre-flight)
                   derives a stable action_name per op
                   builds flat action_name → op index (plus operation_id index for --diff)
   → auth.py       VManageAuth initialised with credentials
-  → dispatcher.py httpx.AsyncClient created
+  → dispatcher.py httpx2.AsyncClient created
   → dispatcher.connect()  → auth.login() → JWT or session flow
   → tools.py      registers one fastmcp tool per group
   → mcp.run()     starts selected transport
@@ -339,7 +340,7 @@ LLM calls tool "monitoring"
   → dispatcher.call("get_device_counters", {})
   → dispatcher     looks up op via SpecIndex.by_action_name
                    resolves path template, splits query/body params
-                   fires httpx request with auth headers
+                   fires httpx2 request with auth headers
                    on 302/welcome.html or 401: re-auths, retries once
   → LLM            receives JSON response
 ```
@@ -482,7 +483,9 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 | RO/RW | Flag at runtime | Safe default, explicit opt-in for mutations |
 | Auth | Username/password → JWT or session | Matches actual vManage auth flow; API tokens require extra config |
 | JWT vs session | JWT default, session fallback | JWT is simpler (one call); session needed for older deployments incl. the DevNet sandbox |
-| Cookie handling | httpx jar auto-manages JSESSIONID | Sending a manual `Cookie:` header alongside the jar produces dupes and vManage rejects |
+| Cookie handling | httpx2 jar auto-manages JSESSIONID | Sending a manual `Cookie:` header alongside the jar produces dupes and vManage rejects |
+| HTTP client | `httpx2` (Pydantic's continuation of `httpx`) | `httpx` has had no stable release since 0.28.1 (Dec 2024) — only `1.0.dev*` prereleases. `httpx2` is the same API under active stewardship, with security updates. Honest caveat: this does **not** remove `httpx` from the tree — `mcp` (under `fastmcp`) still depends on it, so both stacks install. What it buys is that *our own* critical path (auth, dispatcher, fetcher) runs on the maintained library. (#99) |
+| HTTP mocking in tests | Hand-rolled `tests/mocking.py` over `httpx2.MockTransport`; `respx` dropped | respx patches httpx's transport internals and pins `httpx>=0.25`, so it cannot see httpx2 traffic (upstream respx #316/#317 still open; no `respx2` exists). The shim reproduces just the respx surface the suite used (`route.mock/respond/side_effect/calls/call_count`, `assert_all_called`), so the 243 assertions carried over unchanged — which is the point: unchanged assertions are what prove httpx2 behaves the same. One real consequence: respx patched globally, but `MockTransport` must be **injected**, so `Dispatcher(...)` and `make_client(...)` grew an optional `transport` param (`None` in production). (#99) |
 | Config loading | pydantic-settings; YAML optional; CLI > env > YAML > defaults | A mandatory YAML made `uv tool install` + MCP-client launches crash (no file in cwd) before creds were read. Env-first config (like the netbox sister project) lets `export VMANAGE_USERNAME/PASSWORD` or `.env` alone run the server. (#49) |
 | Spec versioning | Drop folder + config line | No codegen, easy upgrade path |
 | Spec formats | YAML, YML, **and JSON** | Cisco publishes 20.15 as YAML-with-`.json`-extension, 20.16/20.18 as plain YAML; we accept all three extensions. |

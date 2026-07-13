@@ -15,7 +15,7 @@
    and host is non-loopback, demote to 127.0.0.1 unless
    --insecure-allow-public was passed
 5. VManageAuth.login() — JWT or session
-6. Dispatcher attaches the index and a single httpx.AsyncClient
+6. Dispatcher attaches the index and a single httpx2.AsyncClient
    (timeout + retry policy from vmanage.timeout / vmanage.retries)
 7. tools.register_tools(...) registers one MCP tool per group
 8. For HTTP transports: transport_auth middleware wraps the ASGI app
@@ -38,7 +38,7 @@ dispatcher:
   ↓ ensure_fresh()           # JWT refresh if needed
   ↓ split params -> path / query / body
   ↓ substitute path template
-  ↓ httpx.request(method, url, params=, json=, headers=)
+  ↓ httpx2.request(method, url, params=, json=, headers=)
 
   ↓ if 302 welcome.html or 401:
     ↓ auth.login() again
@@ -59,5 +59,5 @@ dispatcher:
 mcp.run() returns when the transport closes
 finally: dispatcher.close()
   ↓ auth.logout()
-  ↓ httpx.AsyncClient.aclose()
+  ↓ httpx2.AsyncClient.aclose()
 ```

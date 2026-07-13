@@ -27,7 +27,7 @@ vmanage:
   username: "${VMANAGE_USERNAME}"   # required (use env var)
   password: "${VMANAGE_PASSWORD}"   # required (use env var)
   use_jwt: true                     # default: true. Set to false to force JSESSIONID + XSRF fallback.
-  timeout: 30.0                     # default: 30.0. Per-request httpx timeout in seconds.
+  timeout: 30.0                     # default: 30.0. Per-request httpx2 timeout in seconds.
   retries:                          # transient-failure retry policy
     max_attempts: 3                 # default: 3. Total attempts incl. first try; 1 disables retries.
     statuses: [502, 503, 504]       # default. HTTP status codes to retry.
@@ -214,7 +214,7 @@ where `raw = min(backoff_cap, backoff_base * 2**attempt)`.
 What is retried:
 
 - HTTP responses whose status is in `vmanage.retries.statuses`.
-- `httpx.TimeoutException` and other `httpx.RequestError` subclasses
+- `httpx2.TimeoutException` and other `httpx2.RequestError` subclasses
   (connection resets, DNS failures).
 
 What is **not** retried by default:
