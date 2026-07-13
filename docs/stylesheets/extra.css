@@ -1,0 +1,22 @@
+/* Soften the default black-on-white / white-on-black extremes into a warmer,
+   lower-glare "paper" pair. Only background/foreground surfaces are touched;
+   the indigo primary/accent from mkdocs.yml is left intact. */
+
+/* Light mode — dimmed warm paper (not bright white), soft ink.
+   --md-default-bg-color--light paints the top bar in the modern theme;
+   set it to a lifted tone distinct from (lighter than) the page body. */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #ece7de;
+  --md-default-bg-color--light: #f5f2ec;
+  --md-default-fg-color: #3b3833;
+  --md-code-bg-color: #e3ddd2;
+}
+
+/* Dark mode — lifted warm gray (not near-black), soft off-white ink.
+   Top bar lifted a notch above the page body. */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #2b2a27;
+  --md-default-bg-color--light: #37342f;
+  --md-default-fg-color: #e2dfd8;
+  --md-code-bg-color: #34322e;
+}

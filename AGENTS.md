@@ -11,7 +11,7 @@ auth, project layout, data flow, CLI, Docker, and key decisions.
 - Source lives in `sdwan_mcp/`. Tests in `tests/`. Docs in `docs/`.
 - `uv sync --group dev --group docs` to install everything.
 - `uv run pytest -v` runs the suite. `uv run ruff check sdwan_mcp tests` lints.
-- CI enforces lint + tests + docker build + mkdocs strict build.
+- CI enforces lint + tests + docker build + `zensical build --strict` (docs).
 - Default behavior is read-only. The `--read-write` flag is the only way to register
   mutating operations.
 - Specs go in `specs/{version}/` and may be `.yaml`, `.yml`, or `.json`. Filenames

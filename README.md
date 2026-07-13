@@ -195,7 +195,7 @@ sdwan_mcp/          source package
   tools.py          dynamic MCP tool registration
   diff.py           version diff utility
 tests/              pytest suite (respx for HTTP)
-docs/               mkdocs-material site, deployed to GitHub Pages
+docs/               Zensical site, deployed to GitHub Pages
 specs/{version}/    OpenAPI YAML/JSON, one folder per vManage version
 .github/workflows/  lint, test, docker, docs, release
 ```

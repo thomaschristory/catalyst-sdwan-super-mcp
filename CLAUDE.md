@@ -21,7 +21,7 @@ Docs: <https://thomaschristory.github.io/catalyst-sdwan-super-mcp/>.
 - **Config parsing:** `pyyaml` + `python-dotenv`
 - **Tests:** `pytest`, `respx` (HTTP mocks), `pytest-asyncio`
 - **Lint / format:** `ruff`
-- **Docs:** `mkdocs-material`, deployed to GitHub Pages
+- **Docs:** `zensical` (reads `mkdocs.yml` natively), deployed to GitHub Pages
 
 Setup:
 
@@ -185,7 +185,7 @@ catalyst-sdwan-super-mcp/
     diff.py                   version diff utility
   tests/                      pytest suite (test_loader, test_dispatcher, test_diff, test_config)
     conftest.py               minimal OpenAPI spec fixture
-  docs/                       mkdocs-material site
+  docs/                       Zensical site (Material theme)
     index.md
     getting-started/{install,first-run,sandbox}.md
     guides/{mcp-clients,read-write,tool-splitting,spec-versions,docker}.md
@@ -202,7 +202,7 @@ catalyst-sdwan-super-mcp/
     dependabot.yml
   scripts/                    helper scripts (currently empty placeholder)
   pyproject.toml              project + ruff + mypy + pytest config
-  mkdocs.yml
+  mkdocs.yml                  docs config — still the config file under Zensical
   Dockerfile                  multi-stage, uv-based
   docker-compose.yml          SSE on :8000 by default
   sdwan-mcp.yaml                 default config — points at DevNet sandbox
@@ -492,6 +492,8 @@ PR #15 (closed without merge, 2026-05-24) is a worked example of this review pat
 | Pagination knobs | Config defaults + `_*` reserved params | Server-wide default, per-call override without bloating action params. (#8) |
 | Pagination response shape | Always wrap when paginated (`{data, pagination}`) | Predictable signal to LLM that auto-follow ran. (#8) |
 | Pagination detection | Spec-load time from param names | Cheap, deterministic; response sanity-check covers drift. (#8) |
+| Docs generator | Zensical (`zensical build --strict`), config stays in `mkdocs.yml` | Successor to MkDocs + Material from the same team. Reads `mkdocs.yml` as-is, so URLs/anchors and the whole nav are preserved and rollback is just reverting the deps. Builds went from seconds to ~0.3s, and the stricter validator checks **anchors**, not just links — it caught a broken `#debug--capture-…` fragment in `reference/cli.md` that MkDocs' `--strict` had silently shipped. Setup is vanilla (no `plugins:`, stock `theme.features`), which is the case upstream says migrates cleanly. (#97) |
+| Docs theme | Zensical `modern` (the default — no `theme.variant` key) + warm "paper" `extra_css` | Matches the sister project `panorama-super-cli`, so the super-* family keeps one look. `modern` is where upstream focuses new development (`classic` reproduces the old Material look and is still supported, but is in maintenance). The modern top bar is painted from `--md-default-bg-color--light`, **not** `primary`, so `docs/stylesheets/extra.css` must override that variable — otherwise the header stays stock near-white/near-black regardless of the indigo palette. (#97) |
 | Debug mode | Off-by-default capture of upstream req/resp, attached to result + stderr; redact auth headers **and credential-shaped body/query values**; capture errors-only by default | Stats-DB `REST0001`s were undiagnosable from the client — hints encode guesses, not facts. Captures the serialized body actually sent + full upstream error so failure modes (RBAC scope vs disabled DB vs request shape) can be told apart. Body redaction (not just headers) because reachable GETs like `/client/token` return a live token in the body — headers-only would leak it into a capture labelled "safe to share" (adversarial review of #72). (#72) |
 
 ---
