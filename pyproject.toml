@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: System :: Networking",
 ]
 dependencies = [
-    "fastmcp>=3,<4",
+    "fastmcp>=3,<5",
     "httpx2>=2.5",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
