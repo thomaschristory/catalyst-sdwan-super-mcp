@@ -11,6 +11,9 @@ on:
       - "sdwan_mcp/**"
       - ".github/workflows/docker.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
